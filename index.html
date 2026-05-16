@@ -12,7 +12,6 @@
     .list-item { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #eee; padding: 12px 0; }
     .list-item.future { background: #fafafa; }
     .edit-icon { cursor: pointer; font-size: 18px; color: #007bff; padding: 5px; }
-    
     .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); justify-content: center; align-items: center; z-index: 2000; }
     .modal-content { background: white; padding: 20px; border-radius: 8px; width: 90%; max-width: 400px; box-sizing: border-box; }
     .modal-content h3 { margin-top: 0; border-bottom: 1px solid #ddd; padding-bottom: 10px; }
@@ -23,14 +22,8 @@
     .modal-actions button { flex: 1; padding: 10px; border-radius: 4px; font-weight: bold; border: none; cursor: pointer; }
     .btn-cancel { background: #6c757d; color: white; }
     .btn-save { background: #00B900; color: white; border: none;}
-    
     #loader { color: #00B900; font-weight: bold; text-align: center; margin-bottom: 10px; }
-
-    .bottom-bar {
-      position: fixed; bottom: 0; left: 0; width: 100%;
-      background: #fff; box-shadow: 0 -2px 10px rgba(0,0,0,0.1);
-      display: flex; gap: 10px; padding: 15px; box-sizing: border-box; z-index: 1000;
-    }
+    .bottom-bar { position: fixed; bottom: 0; left: 0; width: 100%; background: #fff; box-shadow: 0 -2px 10px rgba(0,0,0,0.1); display: flex; gap: 10px; padding: 15px; box-sizing: border-box; z-index: 1000; }
     .btn-punch { flex: 1; padding: 15px 0; font-size: 16px; font-weight: bold; border: none; border-radius: 8px; cursor: pointer; }
     .btn-in { background: #00B900; color: white; }
     .btn-out { background: #FF9800; color: white; }
@@ -40,23 +33,19 @@
 <body>
 
   <div id="loader">通信中...</div>
-  
   <div class="card">
     <h2>勤怠一覧・編集</h2>
     <div id="attendanceList"></div>
   </div>
-
   <div class="bottom-bar">
     <button id="btnIn" class="btn-punch btn-in" onclick="punch('in')" disabled>出勤</button>
     <button id="btnOut" class="btn-punch btn-out" onclick="punch('out')" disabled>退勤</button>
   </div>
-
   <div id="editModal" class="modal">
     <div class="modal-content">
       <h3 id="modalTitle">勤怠の編集</h3>
       <input type="hidden" id="modalRowNum">
       <input type="hidden" id="modalDate">
-      
       <div class="form-group">
         <label>区分</label>
         <select id="modalType" onchange="toggleTimeFields()">
@@ -64,7 +53,6 @@
           <option value="holiday">公休</option>
         </select>
       </div>
-
       <div id="timeFields">
         <div class="form-group">
           <label>出勤時刻</label>
@@ -75,12 +63,10 @@
           <input type="time" id="modalOutTime">
         </div>
       </div>
-
       <div class="form-group">
         <label>備考</label>
         <input type="text" id="modalRemark" placeholder="直行、遅刻など">
       </div>
-
       <div class="modal-actions">
         <button class="btn-cancel" onclick="closeModal()">キャンセル</button>
         <button class="btn-save" onclick="saveChanges()">保存する</button>
@@ -94,39 +80,39 @@
     let lineUserId = "";
     let currentData = [];
 
+    // ▼ 共通エラー処理関数 ▼
+    async function handleResponse(res) {
+      if (!res.ok) {
+        const rawText = await res.text();
+        throw new Error(`[HTTP ${res.status}] ${rawText}`);
+      }
+      return res.json();
+    }
+
     window.onload = function() {
-      try {
-        liff.init({ liffId: LIFF_ID }).then(() => {
-          if (!liff.isLoggedIn()) liff.login();
-          else {
-            liff.getProfile().then(profile => {
-              lineUserId = profile.userId;
-              fetchAttendance();
-            }).catch(err => alert("LINEプロフィールの取得に失敗しました"));
-          }
-        });
-      } catch (e) { alert("予期せぬエラー: " + e.message); }
+      liff.init({ liffId: LIFF_ID }).then(() => {
+        if (!liff.isLoggedIn()) liff.login();
+        else {
+          liff.getProfile().then(profile => {
+            lineUserId = profile.userId;
+            fetchAttendance();
+          }).catch(err => alert("LINEプロフィールの取得失敗"));
+        }
+      }).catch(e => alert("LIFF初期化エラー: " + e.message));
     };
 
     function fetchAttendance() {
       document.getElementById('loader').style.display = 'block';
       fetch(`${API_URL}?userId=${lineUserId}`)
-        .then(async res => { 
-          if (!res.ok) {
-            const errData = await res.json().catch(()=>({}));
-            throw new Error(errData.error || `HTTP ${res.status}`);
-          }
-          return res.json(); 
-        })
+        .then(handleResponse)
         .then(res => {
           document.getElementById('loader').style.display = 'none';
           if (res.error) { alert(res.error); return; }
-          
           currentData = res.data;
           renderList();
           updatePunchButtons();
         })
-        .catch(err => { alert("通信エラー: " + err.message); document.getElementById('loader').style.display = 'none'; });
+        .catch(err => { alert("一覧取得エラー:\n" + err.message); document.getElementById('loader').style.display = 'none'; });
     }
 
     function renderList() {
@@ -138,13 +124,11 @@
         const rowDate = new Date(row.date);
         const isFuture = rowDate > today;
         const bgClass = isFuture ? "future" : "";
-        
         let displayMsg = "--:-- / --:--";
         if (row.remark === '公休') displayMsg = "【公休】";
         else if (row.inTime || row.outTime) displayMsg = `出勤: ${row.inTime || '--:--'} / 退勤: ${row.outTime || '--:--'}`;
         else if (isFuture) displayMsg = "<span style='color:#ccc'>未打刻</span>";
 
-        // row.rowNum を安全な文字列型に変換して渡す
         const passRowNum = (row.rowNum === null || row.rowNum === undefined) ? "" : row.rowNum;
 
         html += `
@@ -173,11 +157,8 @@
       if (!todayEntry) return;
       if (todayEntry.remark === '公休') return; 
 
-      if (!todayEntry.inTime) {
-        btnIn.disabled = false;
-      } else if (todayEntry.inTime && !todayEntry.outTime) {
-        btnOut.disabled = false;
-      }
+      if (!todayEntry.inTime) btnIn.disabled = false;
+      else if (todayEntry.inTime && !todayEntry.outTime) btnOut.disabled = false;
     }
 
     function punch(type) {
@@ -197,31 +178,21 @@
         remark: (todayEntry && todayEntry.remark) ? todayEntry.remark : ""
       };
 
-      if (type === 'in') {
-        payload.inTime = timeStr;
-        payload.outTime = todayEntry ? todayEntry.outTime : "";
-      } else if (type === 'out') {
-        payload.inTime = todayEntry ? todayEntry.inTime : "";
-        payload.outTime = timeStr;
-      }
+      if (type === 'in') { payload.inTime = timeStr; payload.outTime = todayEntry ? todayEntry.outTime : ""; } 
+      else if (type === 'out') { payload.inTime = todayEntry ? todayEntry.inTime : ""; payload.outTime = timeStr; }
 
       fetch(API_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
       })
-      .then(res => { if (!res.ok) throw new Error(`HTTP ${res.status}`); return res.json(); })
+      .then(handleResponse)
       .then(res => {
-        if(res.success) { 
-          alert(`${type === 'in' ? '出勤' : '退勤'}を打刻しました：${timeStr}`); 
-          fetchAttendance();
-        } else { 
-          alert("エラー: " + res.error); 
-          fetchAttendance();
-        }
+        if(res.success) { alert(`${type === 'in' ? '出勤' : '退勤'}を打刻しました：${timeStr}`); fetchAttendance(); } 
+        else { alert("エラー: " + res.error); fetchAttendance(); }
       })
       .catch(err => {
-         alert("打刻通信エラー: " + err.message);
+         alert("打刻エラー詳細:\n" + err.message);
          document.getElementById('loader').style.display = 'none';
          updatePunchButtons();
       });
@@ -236,7 +207,6 @@
       const targetDate = new Date(dateStr);
       const today = new Date(); today.setHours(0,0,0,0);
       const isFuture = targetDate > today;
-      
       const modalType = document.getElementById('modalType');
       const timeFields = document.getElementById('timeFields');
 
@@ -249,13 +219,11 @@
 
       if (isFuture) { modalType.value = 'holiday'; modalType.disabled = true; timeFields.style.display = 'none'; } 
       else { modalType.disabled = false; toggleTimeFields(); }
-
       document.getElementById('editModal').style.display = 'flex';
     }
 
     document.addEventListener('click', function(e) {
-      const modal = document.getElementById('editModal');
-      if (e.target === modal) closeModal();
+      if (e.target === document.getElementById('editModal')) closeModal();
     });
 
     function closeModal() { document.getElementById('editModal').style.display = 'none'; }
@@ -278,11 +246,14 @@
           remark: type === 'holiday' ? '公休' : document.getElementById('modalRemark').value 
         })
       })
-      .then(res => { if (!res.ok) throw new Error(`HTTP ${res.status}`); return res.json(); })
+      .then(handleResponse)
       .then(res => {
         if(res.success) { fetchAttendance(); }
-        else { alert("エラー: " + res.error); document.getElementById('loader').style.display = 'none'; }
-      }).catch(err => { alert("通信エラー"); document.getElementById('loader').style.display = 'none'; });
+        else { alert("保存エラー: " + res.error); document.getElementById('loader').style.display = 'none'; }
+      }).catch(err => { 
+        alert("保存エラー詳細:\n" + err.message); 
+        document.getElementById('loader').style.display = 'none'; 
+      });
     }
   </script>
 </body>
