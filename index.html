@@ -6,7 +6,6 @@
   <title>勤怠管理システム</title>
   <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
   <style>
-    /* 下部のボタンバー用の余白を確保 */
     body { font-family: sans-serif; padding: 15px; padding-bottom: 90px; background: #f8f9fa; margin: 0; }
     h2 { font-size: 18px; color: #333; border-bottom: 2px solid #00B900; padding-bottom: 5px; }
     .card { background: #fff; padding: 15px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); margin-bottom: 20px; }
@@ -14,7 +13,6 @@
     .list-item.future { background: #fafafa; }
     .edit-icon { cursor: pointer; font-size: 18px; color: #007bff; padding: 5px; }
     
-    /* モーダル表示の設定 */
     .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); justify-content: center; align-items: center; z-index: 2000; }
     .modal-content { background: white; padding: 20px; border-radius: 8px; width: 90%; max-width: 400px; box-sizing: border-box; }
     .modal-content h3 { margin-top: 0; border-bottom: 1px solid #ddd; padding-bottom: 10px; }
@@ -28,7 +26,6 @@
     
     #loader { color: #00B900; font-weight: bold; text-align: center; margin-bottom: 10px; }
 
-    /* ▼▼▼ 追加：下部追従の打刻ボタンバー ▼▼▼ */
     .bottom-bar {
       position: fixed; bottom: 0; left: 0; width: 100%;
       background: #fff; box-shadow: 0 -2px 10px rgba(0,0,0,0.1);
@@ -45,7 +42,7 @@
   <div id="loader">通信中...</div>
   
   <div class="card">
-    <h2>当月の勤怠一覧</h2>
+    <h2>勤怠一覧・編集</h2>
     <div id="attendanceList"></div>
   </div>
 
@@ -95,7 +92,7 @@
     const LIFF_ID = '2010103214-kTOy0ZBA'; 
     const API_URL = 'https://cf9eor0n64.execute-api.ap-northeast-1.amazonaws.com/attendance';
     let lineUserId = "";
-    let currentData = []; // 取得したデータを保持
+    let currentData = [];
 
     window.onload = function() {
       try {
@@ -111,7 +108,6 @@
       } catch (e) { alert("予期せぬエラー: " + e.message); }
     };
 
-    // 一覧データの取得
     function fetchAttendance() {
       document.getElementById('loader').style.display = 'block';
       fetch(`${API_URL}?userId=${lineUserId}`)
@@ -120,14 +116,13 @@
           document.getElementById('loader').style.display = 'none';
           if (res.error) { alert(res.error); return; }
           
-          currentData = res.data; // データを保存
+          currentData = res.data;
           renderList();
-          updatePunchButtons(); // 打刻ボタンの制御を更新
+          updatePunchButtons();
         })
         .catch(err => { alert("通信エラー: " + err.message); document.getElementById('loader').style.display = 'none'; });
     }
 
-    // リストの描画
     function renderList() {
       let html = "";
       const today = new Date();
@@ -143,6 +138,9 @@
         else if (row.inTime || row.outTime) displayMsg = `出勤: ${row.inTime || '--:--'} / 退勤: ${row.outTime || '--:--'}`;
         else if (isFuture) displayMsg = "<span style='color:#ccc'>未打刻</span>";
 
+        // row.rowNum を安全な文字列型に変換して渡す
+        const passRowNum = (row.rowNum === null || row.rowNum === undefined) ? "" : row.rowNum;
+
         html += `
           <div class="list-item ${bgClass}">
             <div>
@@ -150,46 +148,33 @@
               <span style="font-size:14px; color:#666;">${displayMsg}</span>
               ${row.remark && row.remark !== '公休' ? `<br><small style="color:#999">備考: ${row.remark}</small>` : ''}
             </div>
-            <div class="edit-icon" onclick="openModal('${row.rowNum}', '${row.date}', '${row.inTime}', '${row.outTime}', '${row.remark}')">✏️</div>
+            <div class="edit-icon" onclick="openModal('${passRowNum}', '${row.date}', '${row.inTime}', '${row.outTime}', '${row.remark}')">✏️</div>
           </div>`;
       });
       document.getElementById('attendanceList').innerHTML = html;
     }
 
-    // ▼▼▼ 追加：打刻ボタンの制御（ダブル登録防止） ▼▼▼
     function updatePunchButtons() {
-      // 今日の日付文字列を生成 (YYYY/MM/DD)
       const d = new Date();
       const todayStr = `${d.getFullYear()}/${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')}`;
-      
       const todayEntry = currentData.find(r => r.date === todayStr);
       const btnIn = document.getElementById('btnIn');
       const btnOut = document.getElementById('btnOut');
 
-      // 初期状態は両方無効化
       btnIn.disabled = true;
       btnOut.disabled = true;
 
       if (!todayEntry) return;
-
-      if (todayEntry.remark === '公休') {
-        // 公休の日は打刻不可
-        return; 
-      }
+      if (todayEntry.remark === '公休') return; 
 
       if (!todayEntry.inTime) {
-        // 出勤時間が無ければ「出勤」可能
         btnIn.disabled = false;
       } else if (todayEntry.inTime && !todayEntry.outTime) {
-        // 出勤していて退勤していなければ「退勤」可能
         btnOut.disabled = false;
       }
-      // 両方入っていれば両方無効のまま
     }
 
-    // ▼▼▼ 追加：リアルタイム打刻処理 ▼▼▼
     function punch(type) {
-      // 連打防止のため即座にボタンを無効化
       document.getElementById('btnIn').disabled = true;
       document.getElementById('btnOut').disabled = true;
       document.getElementById('loader').style.display = 'block';
@@ -197,13 +182,12 @@
       const d = new Date();
       const todayStr = `${d.getFullYear()}/${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')}`;
       const timeStr = `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
-
       const todayEntry = currentData.find(r => r.date === todayStr);
       
       let payload = {
         userId: lineUserId,
         date: todayStr,
-        rowNum: (todayEntry && todayEntry.rowNum) ? todayEntry.rowNum : "",
+        rowNum: (todayEntry && todayEntry.rowNum) ? String(todayEntry.rowNum) : "",
         remark: (todayEntry && todayEntry.remark) ? todayEntry.remark : ""
       };
 
@@ -211,7 +195,7 @@
         payload.inTime = timeStr;
         payload.outTime = todayEntry ? todayEntry.outTime : "";
       } else if (type === 'out') {
-        payload.inTime = todayEntry ? todayEntry.inTime : ""; // 既存の出勤時間を引き継ぐ
+        payload.inTime = todayEntry ? todayEntry.inTime : "";
         payload.outTime = timeStr;
       }
 
@@ -224,7 +208,7 @@
       .then(res => {
         if(res.success) { 
           alert(`${type === 'in' ? '出勤' : '退勤'}を打刻しました：${timeStr}`); 
-          fetchAttendance(); // 再読み込みして状態を更新
+          fetchAttendance();
         } else { 
           alert("エラー: " + res.error); 
           fetchAttendance();
@@ -233,13 +217,12 @@
       .catch(err => {
          alert("打刻通信エラー: " + err.message);
          document.getElementById('loader').style.display = 'none';
-         updatePunchButtons(); // エラー時はボタン状態を戻す
+         updatePunchButtons();
       });
     }
 
-    // モーダル処理群（変更なし）
     function openModal(rowNum, dateStr, inTime, outTime, remark) {
-      document.getElementById('modalRowNum').value = (rowNum === "null" || rowNum === null) ? "" : rowNum;
+      document.getElementById('modalRowNum').value = (rowNum === "Math" || rowNum === "" || rowNum === "null") ? "" : rowNum;
       document.getElementById('modalDate').value = dateStr;
       document.getElementById('modalTitle').innerText = `${dateStr} の編集`;
       document.getElementById('modalRemark').value = remark === '公休' ? '' : remark;
@@ -263,6 +246,11 @@
 
       document.getElementById('editModal').style.display = 'flex';
     }
+
+    document.addEventListener('click', function(e) {
+      const modal = document.getElementById('editModal');
+      if (e.target === modal) closeModal();
+    });
 
     function closeModal() { document.getElementById('editModal').style.display = 'none'; }
     function toggleTimeFields() { document.getElementById('timeFields').style.display = document.getElementById('modalType').value === 'holiday' ? 'none' : 'block'; }
@@ -288,7 +276,7 @@
       .then(res => {
         if(res.success) { fetchAttendance(); }
         else { alert("エラー: " + res.error); document.getElementById('loader').style.display = 'none'; }
-      }).catch(err => alert("通信エラー"));
+      }).catch(err => { alert("通信エラー"); document.getElementById('loader').style.display = 'none'; });
     }
   </script>
 </body>
