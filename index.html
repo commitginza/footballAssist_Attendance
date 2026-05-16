@@ -72,33 +72,53 @@
     </div>
   </div>
 
-  <script>
+<script>
     const LIFF_ID = '2010103214-kTOy0ZBA'; 
     const API_URL = 'https://cf9eor0n64.execute-api.ap-northeast-1.amazonaws.com/attendance';
     let lineUserId = "";
 
-    // 1. LIFFの初期化とLINE ID取得
     window.onload = function() {
-      liff.init({ liffId: LIFF_ID }).then(() => {
-        if (!liff.isLoggedIn()) {
-          liff.login();
-        } else {
-          const profile = liff.getDecodedIDToken();
-          lineUserId = profile.sub; // LINEユーザーID取得
-          fetchAttendance();
-        }
-      }).catch(err => console.error("LIFF初期化失敗", err));
+      // エラーを画面に表示するための安全策
+      try {
+        liff.init({ liffId: LIFF_ID }).then(() => {
+          if (!liff.isLoggedIn()) {
+            liff.login();
+          } else {
+            // ★修正ポイント：getDecodedIDToken()ではなく、より確実なgetProfile()を使用
+            liff.getProfile().then(profile => {
+              lineUserId = profile.userId;
+              fetchAttendance();
+            }).catch(err => {
+              alert("LINEプロフィールの取得に失敗しました: " + err.message);
+              document.getElementById('loader').innerText = "エラー: プロフィール取得失敗";
+            });
+          }
+        }).catch(err => {
+          alert("LIFFの初期化に失敗しました: " + err.message);
+          document.getElementById('loader').innerText = "エラー: LIFF初期化失敗";
+        });
+      } catch (e) {
+        alert("予期せぬエラー: " + e.message);
+      }
     };
 
-    // 2. AWS API経由で当月のデータを取得して描画
     function fetchAttendance() {
       document.getElementById('loader').style.display = 'block';
+      
       fetch(`${API_URL}?userId=${lineUserId}`)
-        .then(res => res.json())
+        .then(res => {
+          // ★追加：API GatewayからのHTTPエラーステータスを検知
+          if (!res.ok) throw new Error(`HTTPステータス ${res.status}`);
+          return res.json();
+        })
         .then(res => {
           document.getElementById('loader').style.display = 'none';
           const container = document.getElementById('attendanceList');
-          if (res.error) { container.innerHTML = res.error; return; }
+          if (res.error) { 
+            alert("バックエンドからのエラー: " + res.error);
+            container.innerHTML = res.error; 
+            return; 
+          }
           
           let html = "";
           res.data.forEach(row => {
@@ -111,61 +131,23 @@
                   </span>
                   ${row.remark && row.remark !== '公休' ? `<br><small style="color:#999">備考: ${row.remark}</small>` : ''}
                 </div>
-                <div class="edit-icon" onclick="openModal(${row.rowNum}, '${row.date}', '${row.inTime}', '${row.outTime}', '${row.remark}')">✏️</div>
+                <div class="edit-icon" onclick="openModal('${row.rowNum}', '${row.date}', '${row.inTime}', '${row.outTime}', '${row.remark}')">✏️</div>
               </div>`;
           });
           container.innerHTML = html;
+        })
+        .catch(err => {
+          // ★追加：API通信エラー（CORSエラーなど）を検知
+          alert("API通信エラーが発生しました: " + err.message);
+          document.getElementById('loader').innerText = "エラー: サーバーに接続できません";
         });
     }
 
-    // 3. モーダルを開く（未来日判定ロジックを含む）
-    function openModal(rowNum, dateStr, inTime, outTime, remark) {
-      document.getElementById('modalRowNum').value = rowNum;
-      document.getElementById('modalDate').value = dateStr;
-      document.getElementById('modalTitle').innerText = `${dateStr} の編集`;
-      document.getElementById('modalRemark').value = remark === '公休' ? '' : remark;
-
-      // 未来日かどうかの判定
-      const today = new Date();
-      today.setHours(0,0,0,0);
-      const targetDate = new Date(dateStr);
-
-      const isFuture = targetDate > today;
-      const timeFields = document.getElementById('timeFields');
-      const modalType = document.getElementById('modalType');
-
-      if (remark === '公休') {
-        modalType.value = 'holiday';
-      } else {
-        modalType.value = 'work';
-        document.getElementById('modalInTime').value = inTime;
-        document.getElementById('modalOutTime').value = outTime;
-      }
-
-      if (isFuture) {
-        // 未来日の場合：区分を「公休」に強制、通常勤務への変更不可、時間入力欄を非表示
-        modalType.value = 'holiday';
-        modalType.disabled = true; 
-        timeFields.style.display = 'none';
-      } else {
-        // 今日以前の場合：通常通り編集可能
-        modalType.disabled = false;
-        toggleTimeFields();
-      }
-
-      document.getElementById('editModal').style.display = 'flex';
-    }
-
-    function closeModal() {
-      document.getElementById('editModal').style.display = 'none';
-    }
-
-    function toggleTimeFields() {
-      const type = document.getElementById('modalType').value;
-      document.getElementById('timeFields').style.display = type === 'holiday' ? 'none' : 'block';
-    }
-
-    // 4. AWS API経由で変更データを送信（更新）
+    // --- 以下、モーダル系の関数は省略せずにそのまま残してください ---
+    // (openModal, closeModal, toggleTimeFields, saveChanges)
+    // -----------------------------------------------------------
+    
+    // 省略されていたsaveChangesだけ、catchを追加しておきます
     function saveChanges() {
       const rowNum = document.getElementById('modalRowNum').value;
       const type = document.getElementById('modalType').value;
@@ -181,10 +163,17 @@
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ rowNum, inTime, outTime, remark, userId: lineUserId })
       })
-      .then(res => res.json())
+      .then(res => {
+          if (!res.ok) throw new Error(`HTTPステータス ${res.status}`);
+          return res.json();
+      })
       .then(res => {
         if(res.success) { alert("保存しました"); fetchAttendance(); }
         else { alert("エラー: " + res.error); document.getElementById('loader').style.display = 'none'; }
+      })
+      .catch(err => {
+         alert("保存通信エラー: " + err.message);
+         document.getElementById('loader').style.display = 'none';
       });
     }
   </script>
