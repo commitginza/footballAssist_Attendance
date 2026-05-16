@@ -12,9 +12,15 @@
     .list-item { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #eee; padding: 12px 0; }
     .list-item.future { background: #fafafa; }
     .edit-icon { cursor: pointer; font-size: 18px; color: #007bff; padding: 5px; }
+    
     .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); justify-content: center; align-items: center; z-index: 2000; }
     .modal-content { background: white; padding: 20px; border-radius: 8px; width: 90%; max-width: 400px; box-sizing: border-box; max-height: 90vh; overflow-y: auto; }
     .modal-content h3 { margin-top: 0; border-bottom: 1px solid #ddd; padding-bottom: 10px; }
+    
+    /* ▼ 横並びレイアウト用のCSSを追加 ▼ */
+    .form-row { display: flex; gap: 10px; margin-bottom: 15px; }
+    .form-row .form-group { flex: 1; margin-bottom: 0; }
+    
     .form-group { margin-bottom: 15px; }
     .form-group label { display: block; margin-bottom: 5px; font-weight: bold; font-size: 14px; }
     .form-group input, .form-group select { width: 100%; padding: 8px; box-sizing: border-box; border: 1px solid #ccc; border-radius: 4px; }
@@ -23,6 +29,7 @@
     .btn-cancel { background: #6c757d; color: white; }
     .btn-save { background: #00B900; color: white; border: none;}
     #loader { color: #00B900; font-weight: bold; text-align: center; margin-bottom: 10px; }
+    
     .bottom-bar { position: fixed; bottom: 0; left: 0; width: 100%; background: #fff; box-shadow: 0 -2px 10px rgba(0,0,0,0.1); display: flex; gap: 10px; padding: 15px; box-sizing: border-box; z-index: 1000; }
     .btn-punch { flex: 1; padding: 15px 0; font-size: 16px; font-weight: bold; border: none; border-radius: 8px; cursor: pointer; }
     .btn-in { background: #00B900; color: white; }
@@ -48,14 +55,22 @@
       <h3 id="modalTitle">勤怠の編集</h3>
       <input type="hidden" id="modalRowNum">
       <input type="hidden" id="modalDate">
-      <div class="form-group">
-        <label>区分</label>
-        <select id="modalType" onchange="toggleFields()">
-          <option value="work">通常勤務</option>
-          <option value="holiday">公休</option>
-        </select>
+      
+      <div class="form-row">
+        <div class="form-group">
+          <label>区分</label>
+          <select id="modalType" onchange="toggleFields()">
+            <option value="work">通常勤務</option>
+            <option value="holiday">公休</option>
+          </select>
+        </div>
+        <div class="form-group" id="transportField">
+          <label>交通費 (円)</label>
+          <input type="number" id="modalTransport" placeholder="例: 500">
+        </div>
       </div>
-      <div id="conditionalFields">
+      
+      <div class="form-row" id="timeFields">
         <div class="form-group">
           <label>出勤時刻</label>
           <input type="time" id="modalInTime">
@@ -64,15 +79,13 @@
           <label>退勤時刻</label>
           <input type="time" id="modalOutTime">
         </div>
-        <div class="form-group">
-          <label>交通費 (円)</label>
-          <input type="number" id="modalTransport" placeholder="例: 500">
-        </div>
       </div>
+
       <div class="form-group">
         <label>備考</label>
         <input type="text" id="modalRemark" placeholder="直行、遅刻など">
       </div>
+      
       <div class="modal-actions">
         <button class="btn-cancel" onclick="closeModal()">キャンセル</button>
         <button class="btn-save" onclick="saveChanges()">保存する</button>
@@ -135,7 +148,7 @@
         else if (isFuture) displayMsg = "<span style='color:#ccc'>未打刻</span>";
 
         const passRowNum = (row.rowNum === null || row.rowNum === undefined) ? "" : row.rowNum;
-        const passTransport = row.transport ? row.transport : ""; // nullやundefinedを空文字に
+        const passTransport = row.transport ? row.transport : ""; 
 
         html += `
           <div class="list-item ${bgClass}">
@@ -183,7 +196,7 @@
         date: todayStr,
         rowNum: (todayEntry && todayEntry.rowNum) ? String(todayEntry.rowNum) : "",
         remark: (todayEntry && todayEntry.remark) ? todayEntry.remark : "",
-        transport: (todayEntry && todayEntry.transport) ? todayEntry.transport : "" // 既存の交通費を保持
+        transport: (todayEntry && todayEntry.transport) ? todayEntry.transport : "" 
       };
 
       if (type === 'in') { payload.inTime = timeStr; payload.outTime = todayEntry ? todayEntry.outTime : ""; } 
@@ -206,14 +219,11 @@
       });
     }
 
-    // ▼ 交通費（transport）を引数に追加 ▼
     function openModal(rowNum, dateStr, inTime, outTime, remark, transport) {
       document.getElementById('modalRowNum').value = (rowNum === "Math" || rowNum === "" || rowNum === "null") ? "" : rowNum;
       document.getElementById('modalDate').value = dateStr;
       document.getElementById('modalTitle').innerText = `${dateStr} の編集`;
       document.getElementById('modalRemark').value = remark === '公休' ? '' : remark;
-      
-      // ▼ 交通費をセット ▼
       document.getElementById('modalTransport').value = transport || '';
 
       const targetDate = new Date(dateStr);
@@ -241,9 +251,12 @@
 
     function closeModal() { document.getElementById('editModal').style.display = 'none'; }
     
+    // ▼ 公休の場合の表示切り替えロジックを更新 ▼
     function toggleFields() { 
+      const isHoliday = document.getElementById('modalType').value === 'holiday';
       // 公休の場合は時間と交通費を非表示にする
-      document.getElementById('conditionalFields').style.display = document.getElementById('modalType').value === 'holiday' ? 'none' : 'block'; 
+      document.getElementById('timeFields').style.display = isHoliday ? 'none' : 'flex'; 
+      document.getElementById('transportField').style.display = isHoliday ? 'none' : 'block'; 
     }
 
     function saveChanges() {
@@ -260,7 +273,7 @@
           date: document.getElementById('modalDate').value, 
           inTime: type === 'holiday' ? '' : document.getElementById('modalInTime').value, 
           outTime: type === 'holiday' ? '' : document.getElementById('modalOutTime').value, 
-          transport: type === 'holiday' ? '' : document.getElementById('modalTransport').value, // ▼ 交通費の追加 ▼
+          transport: type === 'holiday' ? '' : document.getElementById('modalTransport').value, 
           remark: type === 'holiday' ? '公休' : document.getElementById('modalRemark').value 
         })
       })
