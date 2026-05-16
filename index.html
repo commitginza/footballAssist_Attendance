@@ -111,7 +111,13 @@
     function fetchAttendance() {
       document.getElementById('loader').style.display = 'block';
       fetch(`${API_URL}?userId=${lineUserId}`)
-        .then(res => { if (!res.ok) throw new Error(`HTTP ${res.status}`); return res.json(); })
+        .then(async res => { 
+          if (!res.ok) {
+            const errData = await res.json().catch(()=>({}));
+            throw new Error(errData.error || `HTTP ${res.status}`);
+          }
+          return res.json(); 
+        })
         .then(res => {
           document.getElementById('loader').style.display = 'none';
           if (res.error) { alert(res.error); return; }
