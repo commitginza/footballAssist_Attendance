@@ -42,6 +42,7 @@
     .btn-in { background: #00B900; color: white; }
     .btn-out { background: #FF9800; color: white; }
     .btn-punch:disabled { background: #cccccc; cursor: not-allowed; color: #666; }
+    .list-item.today {background: #fff8dc;border-left: 5px solid #00B900;padding-left: 10px;}
   </style>
 </head>
 <body>
@@ -254,8 +255,15 @@
 
       currentData.forEach(row => {
         const rowDate = new Date(String(row.date).replace(/\//g, '-'));
+        rowDate.setHours(0,0,0,0);
         const isFuture = rowDate > today;
-        const bgClass = isFuture ? "future" : "";
+        const isToday = rowDate.getTime() === today.getTime();
+        let bgClass = "";
+        if (isFuture) {
+          bgClass = "future";
+        } else if (isToday) {
+          bgClass = "today";
+        }
         let displayMsg = "--:-- / --:--";
         if (row.remark === '公休') displayMsg = "【公休】";
         else if (row.inTime || row.outTime) displayMsg = `出勤: ${row.inTime || '--:--'} / 退勤: ${row.outTime || '--:--'}`;
@@ -267,7 +275,7 @@
         html += `
           <div class="list-item ${bgClass}">
             <div>
-              <strong>${escapeHtml(row.date)}</strong><br>
+              <strong>${escapeHtml(row.date)}${isToday ? '<span style="color:#00B900;font-size:12px;margin-left:6px;">本日</span>' : ''}</strong><br>
               <span style="font-size:14px; color:#666;">${displayMsg}</span>
               ${row.remark && row.remark !== '公休' ? `<br><small style="color:#999">備考: ${escapeHtml(row.remark)}</small>` : ''}
               ${row.transport ? `<br><small style="color:#999">交通費: ${escapeHtml(row.transport)}円</small>` : ''}
