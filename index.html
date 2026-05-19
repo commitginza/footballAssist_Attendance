@@ -12,24 +12,31 @@
     .list-item { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #eee; padding: 12px 0; }
     .list-item.future { background: #fafafa; }
     .edit-icon { cursor: pointer; font-size: 18px; color: #007bff; padding: 5px; }
-    
+
+    .settings-list { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+    .time-chip { display: inline-flex; align-items: center; gap: 6px; padding: 8px 10px; background: #e8f7e8; color: #0a7a0a; border-radius: 999px; font-weight: bold; font-size: 14px; }
+    .time-chip button { border: none; background: transparent; color: #d00000; font-size: 16px; font-weight: bold; cursor: pointer; padding: 0; }
+    .setting-add-row { display: flex; gap: 8px; align-items: center; }
+    .setting-add-row input { flex: 1; padding: 10px; font-size: 16px; border: 1px solid #ccc; border-radius: 6px; box-sizing: border-box; }
+    .setting-add-row button { padding: 10px 14px; background: #00B900; color: #fff; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; }
+    .hint { color: #777; font-size: 13px; margin-top: 8px; line-height: 1.5; }
+
     .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); justify-content: center; align-items: center; z-index: 2000; }
     .modal-content { background: white; padding: 20px; border-radius: 8px; width: 90%; max-width: 400px; box-sizing: border-box; max-height: 90vh; overflow-y: auto; }
     .modal-content h3 { margin-top: 0; border-bottom: 1px solid #ddd; padding-bottom: 10px; }
-    
-    /* ▼ 横並びレイアウト用のCSSを追加 ▼ */
+
     .form-row { display: flex; gap: 10px; margin-bottom: 15px; }
     .form-row .form-group { flex: 1; margin-bottom: 0; }
-    
+
     .form-group { margin-bottom: 15px; }
     .form-group label { display: block; margin-bottom: 5px; font-weight: bold; font-size: 14px; }
-    .form-group input, .form-group select { width: 80%; padding: 8px; box-sizing: border-box; border: 1px solid #ccc; border-radius: 4px; font-size:16px; }
+    .form-group input, .form-group select { width: 100%; padding: 8px; box-sizing: border-box; border: 1px solid #ccc; border-radius: 4px; font-size:16px; }
     .modal-actions { display: flex; gap: 10px; margin-top: 20px; }
     .modal-actions button { flex: 1; padding: 10px; border-radius: 4px; font-weight: bold; border: none; cursor: pointer; }
     .btn-cancel { background: #6c757d; color: white; }
-    .btn-save { background: #00B900; color: white; border: none;}
+    .btn-save { background: #00B900; color: white; border: none; }
     #loader { color: #00B900; font-weight: bold; text-align: center; margin-bottom: 10px; }
-    
+
     .bottom-bar { position: fixed; bottom: 0; left: 0; width: 100%; background: #fff; box-shadow: 0 -2px 10px rgba(0,0,0,0.1); display: flex; gap: 10px; padding: 15px; box-sizing: border-box; z-index: 1000; }
     .btn-punch { flex: 1; padding: 15px 0; font-size: 16px; font-weight: bold; border: none; border-radius: 8px; cursor: pointer; }
     .btn-in { background: #00B900; color: white; }
@@ -40,22 +47,58 @@
 <body>
 
   <div id="loader">通信中...</div>
+
+  <div class="card">
+    <h2>出勤時刻設定</h2>
+    <div id="inTimeSettingsList" class="settings-list"></div>
+    <div class="setting-add-row">
+      <input type="time" id="newInTimeSetting">
+      <button type="button" onclick="addInTimeSetting()">追加</button>
+    </div>
+    <div class="hint">
+      出勤ボタンを押したとき、ここに登録した時刻から選択できます。例：09:00、09:30、10:00
+    </div>
+  </div>
+
   <div class="card">
     <h2>勤怠一覧・編集</h2>
     <div id="attendanceList"></div>
   </div>
-  
+
   <div class="bottom-bar">
     <button id="btnIn" class="btn-punch btn-in" onclick="punch('in')" disabled>出勤</button>
     <button id="btnOut" class="btn-punch btn-out" onclick="punch('out')" disabled>退勤</button>
   </div>
 
+  <!-- 出勤時刻選択モーダル -->
+  <div id="punchInModal" class="modal">
+    <div class="modal-content">
+      <h3>出勤時刻の選択</h3>
+      <input type="hidden" id="punchInDate">
+      <input type="hidden" id="punchInRowNum">
+
+      <div class="form-group">
+        <label>登録する出勤時刻</label>
+        <select id="punchInTimeSelect"></select>
+      </div>
+      <div class="hint">
+        派遣先の打刻時刻に合わせて選択してください。候補を増やす場合は「出勤時刻設定」から追加できます。
+      </div>
+
+      <div class="modal-actions">
+        <button class="btn-cancel" onclick="closePunchInModal()">キャンセル</button>
+        <button class="btn-save" onclick="confirmPunchIn()">この時刻で出勤</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 勤怠編集モーダル -->
   <div id="editModal" class="modal">
     <div class="modal-content">
       <h3 id="modalTitle">勤怠の編集</h3>
       <input type="hidden" id="modalRowNum">
       <input type="hidden" id="modalDate">
-      
+
       <div class="form-row">
         <div class="form-group">
           <label>区分</label>
@@ -69,7 +112,7 @@
           <input type="number" id="modalTransport" placeholder="例: 500">
         </div>
       </div>
-      
+
       <div class="form-row" id="timeFields">
         <div class="form-group">
           <label>出勤時刻</label>
@@ -85,7 +128,7 @@
         <label>備考</label>
         <input type="text" id="modalRemark" placeholder="直行、遅刻など">
       </div>
-      
+
       <div class="modal-actions">
         <button class="btn-cancel" onclick="closeModal()">キャンセル</button>
         <button class="btn-save" onclick="saveChanges()">保存する</button>
@@ -94,10 +137,11 @@
   </div>
 
   <script>
-    const LIFF_ID = '2010103214-kTOy0ZBA'; 
+    const LIFF_ID = '2010103214-kTOy0ZBA';
     const API_URL = 'https://cf9eor0n64.execute-api.ap-northeast-1.amazonaws.com/attendance';
     let lineUserId = "";
     let currentData = [];
+    let inTimeSettings = [];
 
     async function handleResponse(res) {
       if (!res.ok) {
@@ -119,18 +163,88 @@
       }).catch(e => alert("LIFF初期化エラー: " + e.message));
     };
 
+    function showLoader() { document.getElementById('loader').style.display = 'block'; }
+    function hideLoader() { document.getElementById('loader').style.display = 'none'; }
+
     function fetchAttendance() {
-      document.getElementById('loader').style.display = 'block';
-      fetch(`${API_URL}?userId=${lineUserId}`)
+      showLoader();
+      fetch(`${API_URL}?userId=${encodeURIComponent(lineUserId)}`)
         .then(handleResponse)
         .then(res => {
-          document.getElementById('loader').style.display = 'none';
+          hideLoader();
           if (res.error) { alert(res.error); return; }
-          currentData = res.data;
+          currentData = res.data || [];
+          inTimeSettings = (res.settings && Array.isArray(res.settings.inTimes)) ? res.settings.inTimes : [];
+          renderSettings();
           renderList();
           updatePunchButtons();
         })
-        .catch(err => { alert("一覧取得エラー:\n" + err.message); document.getElementById('loader').style.display = 'none'; });
+        .catch(err => { alert("一覧取得エラー:\n" + err.message); hideLoader(); });
+    }
+
+    function renderSettings() {
+      const list = document.getElementById('inTimeSettingsList');
+      if (!inTimeSettings.length) {
+        list.innerHTML = `<span style="color:#999;font-size:14px;">未登録です。出勤時刻を追加してください。</span>`;
+        return;
+      }
+
+      list.innerHTML = inTimeSettings.map((t, index) => `
+        <span class="time-chip">
+          ${escapeHtml(t)}
+          <button type="button" onclick="removeInTimeSetting(${index})">×</button>
+        </span>
+      `).join('');
+    }
+
+    function normalizeTime(value) {
+      if (!value) return "";
+      const m = String(value).match(/^(\d{1,2}):(\d{2})/);
+      if (!m) return "";
+      const h = Number(m[1]);
+      const min = Number(m[2]);
+      if (h < 0 || h > 23 || min < 0 || min > 59) return "";
+      return `${String(h).padStart(2, '0')}:${String(min).padStart(2, '0')}`;
+    }
+
+    function saveInTimeSettings(nextTimes) {
+      showLoader();
+      const normalized = [...new Set(nextTimes.map(normalizeTime).filter(Boolean))].sort();
+
+      fetch(API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'saveSettings',
+          userId: lineUserId,
+          inTimeOptions: normalized
+        })
+      })
+      .then(handleResponse)
+      .then(res => {
+        hideLoader();
+        if (!res.success) { alert("設定保存エラー: " + res.error); return; }
+        inTimeSettings = (res.settings && res.settings.inTimes) ? res.settings.inTimes : normalized;
+        document.getElementById('newInTimeSetting').value = '';
+        renderSettings();
+      })
+      .catch(err => { alert("設定保存エラー詳細:\n" + err.message); hideLoader(); });
+    }
+
+    function addInTimeSetting() {
+      const value = normalizeTime(document.getElementById('newInTimeSetting').value);
+      if (!value) { alert("追加する出勤時刻を選択してください"); return; }
+      if (inTimeSettings.includes(value)) { alert("この時刻はすでに登録されています"); return; }
+      if (inTimeSettings.length >= 8) { alert("出勤時刻候補は最大8件まで登録できます"); return; }
+      saveInTimeSettings([...inTimeSettings, value]);
+    }
+
+    function removeInTimeSetting(index) {
+      const target = inTimeSettings[index];
+      if (!target) return;
+      if (!confirm(`${target} を削除しますか？`)) return;
+      const next = inTimeSettings.filter((_, i) => i !== index);
+      saveInTimeSettings(next);
     }
 
     function renderList() {
@@ -139,7 +253,7 @@
       today.setHours(0,0,0,0);
 
       currentData.forEach(row => {
-        const rowDate = new Date(row.date);
+        const rowDate = new Date(String(row.date).replace(/\//g, '-'));
         const isFuture = rowDate > today;
         const bgClass = isFuture ? "future" : "";
         let displayMsg = "--:-- / --:--";
@@ -148,17 +262,17 @@
         else if (isFuture) displayMsg = "<span style='color:#ccc'>未打刻</span>";
 
         const passRowNum = (row.rowNum === null || row.rowNum === undefined) ? "" : row.rowNum;
-        const passTransport = row.transport ? row.transport : ""; 
+        const passTransport = row.transport ? row.transport : "";
 
         html += `
           <div class="list-item ${bgClass}">
             <div>
-              <strong>${row.date}</strong><br>
+              <strong>${escapeHtml(row.date)}</strong><br>
               <span style="font-size:14px; color:#666;">${displayMsg}</span>
-              ${row.remark && row.remark !== '公休' ? `<br><small style="color:#999">備考: ${row.remark}</small>` : ''}
-              ${row.transport ? `<br><small style="color:#999">交通費: ${row.transport}円</small>` : ''}
+              ${row.remark && row.remark !== '公休' ? `<br><small style="color:#999">備考: ${escapeHtml(row.remark)}</small>` : ''}
+              ${row.transport ? `<br><small style="color:#999">交通費: ${escapeHtml(row.transport)}円</small>` : ''}
             </div>
-            <div class="edit-icon" onclick="openModal('${passRowNum}', '${row.date}', '${row.inTime}', '${row.outTime}', '${row.remark}', '${passTransport}')">✏️</div>
+            <div class="edit-icon" onclick="openModal('${escapeAttr(passRowNum)}', '${escapeAttr(row.date)}', '${escapeAttr(row.inTime)}', '${escapeAttr(row.outTime)}', '${escapeAttr(row.remark)}', '${escapeAttr(passTransport)}')">✏️</div>
           </div>`;
       });
       document.getElementById('attendanceList').innerHTML = html;
@@ -175,32 +289,85 @@
       btnOut.disabled = true;
 
       if (!todayEntry) return;
-      if (todayEntry.remark === '公休') return; 
+      if (todayEntry.remark === '公休') return;
 
       if (!todayEntry.inTime) btnIn.disabled = false;
       else if (todayEntry.inTime && !todayEntry.outTime) btnOut.disabled = false;
     }
 
+    function getTodayStr() {
+      const d = new Date();
+      return `${d.getFullYear()}/${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')}`;
+    }
+
+    function getCurrentTimeStr() {
+      const d = new Date();
+      return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+    }
+
     function punch(type) {
+      if (type === 'in') {
+        openPunchInModal();
+        return;
+      }
+      punchOut();
+    }
+
+    function openPunchInModal() {
+      const todayStr = getTodayStr();
+      const todayEntry = currentData.find(r => r.date === todayStr);
+      if (!todayEntry) { alert("本日の勤怠行が見つかりません"); return; }
+
+      const select = document.getElementById('punchInTimeSelect');
+      const currentTime = getCurrentTimeStr();
+      const options = [...new Set([...inTimeSettings, currentTime])].sort();
+      select.innerHTML = options.map(t => `<option value="${escapeAttr(t)}">${escapeHtml(t)}${t === currentTime ? '（現在時刻）' : ''}</option>`).join('');
+      select.value = inTimeSettings.length ? inTimeSettings[0] : currentTime;
+
+      document.getElementById('punchInDate').value = todayStr;
+      document.getElementById('punchInRowNum').value = todayEntry.rowNum ? String(todayEntry.rowNum) : "";
+      document.getElementById('punchInModal').style.display = 'flex';
+    }
+
+    function closePunchInModal() {
+      document.getElementById('punchInModal').style.display = 'none';
+      updatePunchButtons();
+    }
+
+    function confirmPunchIn() {
+      const selectedTime = normalizeTime(document.getElementById('punchInTimeSelect').value);
+      if (!selectedTime) { alert("出勤時刻を選択してください"); return; }
+      closePunchInModal();
+      sendPunch('in', selectedTime);
+    }
+
+    function punchOut() {
+      sendPunch('out', getCurrentTimeStr());
+    }
+
+    function sendPunch(type, timeStr) {
       document.getElementById('btnIn').disabled = true;
       document.getElementById('btnOut').disabled = true;
-      document.getElementById('loader').style.display = 'block';
+      showLoader();
 
-      const d = new Date();
-      const todayStr = `${d.getFullYear()}/${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')}`;
-      const timeStr = `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+      const todayStr = getTodayStr();
       const todayEntry = currentData.find(r => r.date === todayStr);
-      
+
       let payload = {
         userId: lineUserId,
         date: todayStr,
         rowNum: (todayEntry && todayEntry.rowNum) ? String(todayEntry.rowNum) : "",
         remark: (todayEntry && todayEntry.remark) ? todayEntry.remark : "",
-        transport: (todayEntry && todayEntry.transport) ? todayEntry.transport : "" 
+        transport: (todayEntry && todayEntry.transport) ? todayEntry.transport : ""
       };
 
-      if (type === 'in') { payload.inTime = timeStr; payload.outTime = todayEntry ? todayEntry.outTime : ""; } 
-      else if (type === 'out') { payload.inTime = todayEntry ? todayEntry.inTime : ""; payload.outTime = timeStr; }
+      if (type === 'in') {
+        payload.inTime = timeStr;
+        payload.outTime = todayEntry ? todayEntry.outTime : "";
+      } else if (type === 'out') {
+        payload.inTime = todayEntry ? todayEntry.inTime : "";
+        payload.outTime = timeStr;
+      }
 
       fetch(API_URL, {
         method: 'POST',
@@ -209,12 +376,17 @@
       })
       .then(handleResponse)
       .then(res => {
-        if(res.success) { alert(`${type === 'in' ? '出勤' : '退勤'}を打刻しました：${timeStr}`); fetchAttendance(); } 
-        else { alert("エラー: " + res.error); fetchAttendance(); }
+        if(res.success) {
+          alert(`${type === 'in' ? '出勤' : '退勤'}を打刻しました：${timeStr}`);
+          fetchAttendance();
+        } else {
+          alert("エラー: " + res.error);
+          fetchAttendance();
+        }
       })
       .catch(err => {
          alert("打刻エラー詳細:\n" + err.message);
-         document.getElementById('loader').style.display = 'none';
+         hideLoader();
          updatePunchButtons();
       });
     }
@@ -225,66 +397,76 @@
       document.getElementById('modalTitle').innerText = `${dateStr} の編集`;
       document.getElementById('modalRemark').value = remark === '公休' ? '' : remark;
       document.getElementById('modalTransport').value = transport || '';
+      document.getElementById('modalInTime').value = inTime || '';
+      document.getElementById('modalOutTime').value = outTime || '';
 
-      const targetDate = new Date(dateStr);
+      const targetDate = new Date(String(dateStr).replace(/\//g, '-'));
       const today = new Date(); today.setHours(0,0,0,0);
       const isFuture = targetDate > today;
       const modalType = document.getElementById('modalType');
 
       if (remark === '公休') modalType.value = 'holiday';
-      else {
-        modalType.value = 'work';
-        document.getElementById('modalInTime').value = inTime;
-        document.getElementById('modalOutTime').value = outTime;
-      }
+      else modalType.value = 'work';
 
-      if (isFuture) { modalType.value = 'holiday'; modalType.disabled = true; } 
+      if (isFuture) { modalType.value = 'holiday'; modalType.disabled = true; }
       else { modalType.disabled = false; }
-      
+
       toggleFields();
       document.getElementById('editModal').style.display = 'flex';
     }
 
     document.addEventListener('click', function(e) {
       if (e.target === document.getElementById('editModal')) closeModal();
+      if (e.target === document.getElementById('punchInModal')) closePunchInModal();
     });
 
     function closeModal() { document.getElementById('editModal').style.display = 'none'; }
-    
-    // ▼ 公休の場合の表示切り替えロジックを更新 ▼
-    function toggleFields() { 
+
+    function toggleFields() {
       const isHoliday = document.getElementById('modalType').value === 'holiday';
-      // 公休の場合は時間と交通費を非表示にする
-      document.getElementById('timeFields').style.display = isHoliday ? 'none' : 'flex'; 
-      document.getElementById('transportField').style.display = isHoliday ? 'none' : 'block'; 
+      document.getElementById('timeFields').style.display = isHoliday ? 'none' : 'flex';
+      document.getElementById('transportField').style.display = isHoliday ? 'none' : 'block';
     }
 
     function saveChanges() {
-      document.getElementById('loader').style.display = 'block';
+      showLoader();
       closeModal();
       const type = document.getElementById('modalType').value;
 
       fetch(API_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          userId: lineUserId, 
-          rowNum: document.getElementById('modalRowNum').value, 
-          date: document.getElementById('modalDate').value, 
-          inTime: type === 'holiday' ? '' : document.getElementById('modalInTime').value, 
-          outTime: type === 'holiday' ? '' : document.getElementById('modalOutTime').value, 
-          transport: type === 'holiday' ? '' : document.getElementById('modalTransport').value, 
-          remark: type === 'holiday' ? '公休' : document.getElementById('modalRemark').value 
+        body: JSON.stringify({
+          userId: lineUserId,
+          rowNum: document.getElementById('modalRowNum').value,
+          date: document.getElementById('modalDate').value,
+          inTime: type === 'holiday' ? '' : document.getElementById('modalInTime').value,
+          outTime: type === 'holiday' ? '' : document.getElementById('modalOutTime').value,
+          transport: type === 'holiday' ? '' : document.getElementById('modalTransport').value,
+          remark: type === 'holiday' ? '公休' : document.getElementById('modalRemark').value
         })
       })
       .then(handleResponse)
       .then(res => {
         if(res.success) { fetchAttendance(); }
-        else { alert("保存エラー: " + res.error); document.getElementById('loader').style.display = 'none'; }
-      }).catch(err => { 
-        alert("保存エラー詳細:\n" + err.message); 
-        document.getElementById('loader').style.display = 'none'; 
+        else { alert("保存エラー: " + res.error); hideLoader(); }
+      }).catch(err => {
+        alert("保存エラー詳細:\n" + err.message);
+        hideLoader();
       });
+    }
+
+    function escapeHtml(value) {
+      return String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+
+    function escapeAttr(value) {
+      return escapeHtml(value).replace(/`/g, '&#96;');
     }
   </script>
 </body>
