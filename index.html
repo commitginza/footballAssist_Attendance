@@ -308,6 +308,20 @@
       return `${d.getFullYear()}/${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')}`;
     }
 
+    function normalizeDateString(value) {
+      const m = String(value || '').replace(/-/g, '/').match(/^(\d{4})\/(\d{1,2})\/(\d{1,2})$/);
+      if (!m) return String(value || '');
+      return `${m[1]}/${String(m[2]).padStart(2, '0')}/${String(m[3]).padStart(2, '0')}`;
+    }
+    
+    function parseDateOnly(value) {
+      const m = normalizeDateString(value).match(/^(\d{4})\/(\d{2})\/(\d{2})$/);
+      if (!m) return null;
+      const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+      d.setHours(0, 0, 0, 0);
+      return d;
+    }
+
     function getCurrentTimeStr() {
       const d = new Date();
       return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
@@ -400,25 +414,41 @@
     }
 
     function openModal(rowNum, dateStr, inTime, outTime, remark, transport) {
-      document.getElementById('modalRowNum').value = (rowNum === "Math" || rowNum === "" || rowNum === "null") ? "" : rowNum;
+      document.getElementById('modalRowNum').value =
+        (rowNum === "Math" || rowNum === "" || rowNum === "null") ? "" : rowNum;
+    
       document.getElementById('modalDate').value = dateStr;
       document.getElementById('modalTitle').innerText = `${dateStr} の編集`;
       document.getElementById('modalRemark').value = remark === '公休' ? '' : remark;
       document.getElementById('modalTransport').value = transport || '';
       document.getElementById('modalInTime').value = inTime || '';
       document.getElementById('modalOutTime').value = outTime || '';
-
-      const targetDate = new Date(String(dateStr).replace(/\//g, '-'));
-      const today = new Date(); today.setHours(0,0,0,0);
-      const isFuture = targetDate > today;
+    
+      const targetDate = parseDateOnly(dateStr);
+      const today = parseDateOnly(getTodayStr());
+      const isFuture = targetDate && today && targetDate > today;
+    
       const modalType = document.getElementById('modalType');
-
-      if (remark === '公休') modalType.value = 'holiday';
-      else modalType.value = 'work';
-
-      if (isFuture) { modalType.value = 'holiday'; modalType.disabled = true; }
-      else { modalType.disabled = false; }
-
+    
+      if (isFuture) {
+        // 明日以降は公休登録のみ
+        modalType.value = 'holiday';
+        modalType.disabled = true;
+    
+        document.getElementById('modalInTime').value = '';
+        document.getElementById('modalOutTime').value = '';
+        document.getElementById('modalTransport').value = '';
+      } else {
+        // 今日以前は通常勤務/公休を選択可能
+        modalType.disabled = false;
+    
+        if (remark === '公休') {
+          modalType.value = 'holiday';
+        } else {
+          modalType.value = 'work';
+        }
+      }
+    
       toggleFields();
       document.getElementById('editModal').style.display = 'flex';
     }
