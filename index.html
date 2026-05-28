@@ -125,6 +125,14 @@
         </div>
       </div>
 
+      <div class="form-row" id="breakField">
+        <div class="form-group">
+          <label>休憩時間</label>
+          <input type="time" id="modalBreakTime" value="01:00" step="60">
+          <div class="hint">初期値は1時間です。必要に応じて時分を変更してください。</div>
+        </div>
+      </div>
+
       <div class="form-group">
         <label>備考</label>
         <input type="text" id="modalRemark" placeholder="直行、遅刻など">
@@ -208,6 +216,14 @@
       return `${String(h).padStart(2, '0')}:${String(min).padStart(2, '0')}`;
     }
 
+    function normalizeBreakTime(value) {
+      return normalizeTime(value);
+    }
+    
+    function defaultBreakTime(value) {
+      return normalizeBreakTime(value) || '01:00';
+    }
+    
     function saveInTimeSettings(nextTimes) {
       showLoader();
       const normalized = [...new Set(nextTimes.map(normalizeTime).filter(Boolean))].sort();
@@ -252,37 +268,48 @@
       let html = "";
       const today = new Date();
       today.setHours(0,0,0,0);
-
+    
       currentData.forEach(row => {
         const rowDate = new Date(String(row.date).replace(/\//g, '-'));
         rowDate.setHours(0,0,0,0);
         const isFuture = rowDate > today;
         const isToday = rowDate.getTime() === today.getTime();
+    
         let bgClass = "";
         if (isFuture) {
           bgClass = "future";
         } else if (isToday) {
           bgClass = "today";
         }
+    
+        const breakDisplay = row.breakTime ? row.breakTime : '未入力';
+    
         let displayMsg = "--:-- / --:--";
-        if (row.remark === '公休') displayMsg = "【公休】";
-        else if (row.inTime || row.outTime) displayMsg = `出勤: ${row.inTime || '--:--'} / 退勤: ${row.outTime || '--:--'}`;
-        else if (isFuture) displayMsg = "<span style='color:#ccc'>未打刻</span>";
-
+        if (row.remark === '公休') {
+          displayMsg = "【公休】";
+        } else if (row.inTime || row.outTime || row.breakTime) {
+          displayMsg = `出勤: ${row.inTime || '--:--'} / 退勤: ${row.outTime || '--:--'} / 休憩: ${breakDisplay}`;
+        } else if (isFuture) {
+          displayMsg = "<span style='color:#ccc'>未打刻</span>";
+        }
+    
         const passRowNum = (row.rowNum === null || row.rowNum === undefined) ? "" : row.rowNum;
         const passTransport = row.transport ? row.transport : "";
-
+        const passBreakTime = row.breakTime ? row.breakTime : "";
+    
         html += `
           <div class="list-item ${bgClass}">
             <div>
               <strong>${escapeHtml(row.date)}${isToday ? '<span style="color:#00B900;font-size:12px;margin-left:6px;">本日</span>' : ''}</strong><br>
               <span style="font-size:14px; color:#666;">${displayMsg}</span>
               ${row.remark && row.remark !== '公休' ? `<br><small style="color:#999">備考: ${escapeHtml(row.remark)}</small>` : ''}
+              ${row.breakTime ? `<br><small style="color:#999">休憩時間: ${escapeHtml(row.breakTime)}</small>` : ''}
               ${row.transport ? `<br><small style="color:#999">交通費: ${escapeHtml(row.transport)}円</small>` : ''}
             </div>
-            <div class="edit-icon" onclick="openModal('${escapeAttr(passRowNum)}', '${escapeAttr(row.date)}', '${escapeAttr(row.inTime)}', '${escapeAttr(row.outTime)}', '${escapeAttr(row.remark)}', '${escapeAttr(passTransport)}')">✏️</div>
+            <div class="edit-icon" onclick="openModal('${escapeAttr(passRowNum)}', '${escapeAttr(row.date)}', '${escapeAttr(row.inTime)}', '${escapeAttr(row.outTime)}', '${escapeAttr(passBreakTime)}', '${escapeAttr(row.remark)}', '${escapeAttr(passTransport)}')">✏️</div>
           </div>`;
       });
+    
       document.getElementById('attendanceList').innerHTML = html;
     }
 
@@ -413,7 +440,7 @@
       });
     }
 
-    function openModal(rowNum, dateStr, inTime, outTime, remark, transport) {
+    function openModal(rowNum, dateStr, inTime, outTime, breakTime, remark, transport) {
       document.getElementById('modalRowNum').value =
         (rowNum === "Math" || rowNum === "" || rowNum === "null") ? "" : rowNum;
     
@@ -423,6 +450,9 @@
       document.getElementById('modalTransport').value = transport || '';
       document.getElementById('modalInTime').value = inTime || '';
       document.getElementById('modalOutTime').value = outTime || '';
+    
+      // 休憩時間は、既存値がなければデフォルトで1時間
+      document.getElementById('modalBreakTime').value = defaultBreakTime(breakTime);
     
       const targetDate = parseDateOnly(dateStr);
       const today = parseDateOnly(getTodayStr());
@@ -437,6 +467,7 @@
     
         document.getElementById('modalInTime').value = '';
         document.getElementById('modalOutTime').value = '';
+        document.getElementById('modalBreakTime').value = '';
         document.getElementById('modalTransport').value = '';
       } else {
         // 今日以前は通常勤務/公休を選択可能
@@ -462,15 +493,19 @@
 
     function toggleFields() {
       const isHoliday = document.getElementById('modalType').value === 'holiday';
+    
       document.getElementById('timeFields').style.display = isHoliday ? 'none' : 'flex';
+      document.getElementById('breakField').style.display = isHoliday ? 'none' : 'flex';
       document.getElementById('transportField').style.display = isHoliday ? 'none' : 'block';
     }
 
     function saveChanges() {
       showLoader();
       closeModal();
+    
       const type = document.getElementById('modalType').value;
-
+      const breakTime = defaultBreakTime(document.getElementById('modalBreakTime').value);
+    
       fetch(API_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -480,14 +515,19 @@
           date: document.getElementById('modalDate').value,
           inTime: type === 'holiday' ? '' : document.getElementById('modalInTime').value,
           outTime: type === 'holiday' ? '' : document.getElementById('modalOutTime').value,
+          breakTime: type === 'holiday' ? '' : breakTime,
           transport: type === 'holiday' ? '' : document.getElementById('modalTransport').value,
           remark: type === 'holiday' ? '公休' : document.getElementById('modalRemark').value
         })
       })
       .then(handleResponse)
       .then(res => {
-        if(res.success) { fetchAttendance(); }
-        else { alert("保存エラー: " + res.error); hideLoader(); }
+        if(res.success) {
+          fetchAttendance();
+        } else {
+          alert("保存エラー: " + res.error);
+          hideLoader();
+        }
       }).catch(err => {
         alert("保存エラー詳細:\n" + err.message);
         hideLoader();
