@@ -47,8 +47,15 @@
     .monthly-summary { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
     .summary-box { background: #f8f9fa; border: 1px solid #e5e5e5; border-radius: 8px; padding: 12px; }
     .summary-label { color: #666; font-size: 13px; margin-bottom: 6px; }
-    .summary-value { color: #333; font-size: 18px; font-weight: bold; }
+    .summary-value { color: #333; font-size: 22px; font-weight: bold; }
     .summary-note { color: #777; font-size: 12px; line-height: 1.5; margin-top: 10px; }
+
+    .attendance-header { display: flex; align-items: center; justify-content: space-between; gap: 10px; border-bottom: 2px solid #00B900; padding-bottom: 8px; margin-bottom: 10px; }
+    .attendance-header h2 { border-bottom: none; padding-bottom: 0; margin: 0; text-align: center; }
+    .attendance-title-wrap { flex: 1; text-align: center; }
+    .month-label { color: #666; font-size: 13px; margin-top: 4px; }
+    .month-nav-btn { width: 38px; height: 38px; border: none; border-radius: 50%; background: #00B900; color: #fff; font-size: 22px; font-weight: bold; line-height: 1; cursor: pointer; }
+    .month-nav-btn:disabled { background: #e9ecef; color: #bbb; cursor: not-allowed; }
   </style>
 </head>
 <body>
@@ -68,7 +75,7 @@
   </div>
 
   <div class="card">
-    <h2>当月集計</h2>
+    <h2 id="monthlySummaryTitle">当月集計</h2>
     <div id="monthlySummary" class="monthly-summary">
       <div class="summary-box">
         <div class="summary-label">労働時間合計</div>
@@ -79,11 +86,18 @@
         <div class="summary-value">0時間00分</div>
       </div>
     </div>
-    <!--<div id="monthlySummaryNote" class="summary-note"></div>-->
+    <div id="monthlySummaryNote" class="summary-note"></div>
   </div>
 
   <div class="card">
-    <h2>勤怠一覧・編集</h2>
+    <div class="attendance-header">
+      <button type="button" id="prevMonthBtn" class="month-nav-btn" onclick="changeDisplayMonth(-1)" aria-label="前の月へ">＜</button>
+      <div class="attendance-title-wrap">
+        <h2>勤怠一覧・編集</h2>
+        <div id="attendanceMonthLabel" class="month-label"></div>
+      </div>
+      <button type="button" id="nextMonthBtn" class="month-nav-btn" onclick="changeDisplayMonth(1)" aria-label="次の月へ">＞</button>
+    </div>
     <div id="attendanceList"></div>
   </div>
 
@@ -173,6 +187,14 @@
     let currentData = [];
     let inTimeSettings = [];
 
+    // 表示できる月は「先月・当月・翌月」の3つに限定する。
+    const BASE_MONTH_DATE = new Date();
+    BASE_MONTH_DATE.setHours(0, 0, 0, 0);
+    BASE_MONTH_DATE.setDate(1);
+    let selectedMonthDate = new Date(BASE_MONTH_DATE.getFullYear(), BASE_MONTH_DATE.getMonth(), 1);
+    const MIN_MONTH_OFFSET = -1;
+    const MAX_MONTH_OFFSET = 1;
+
     async function handleResponse(res) {
       if (!res.ok) {
         const rawText = await res.text();
@@ -196,9 +218,56 @@
     function showLoader() { document.getElementById('loader').style.display = 'block'; }
     function hideLoader() { document.getElementById('loader').style.display = 'none'; }
 
+    function getSelectedMonthOffset() {
+      return (selectedMonthDate.getFullYear() - BASE_MONTH_DATE.getFullYear()) * 12
+        + (selectedMonthDate.getMonth() - BASE_MONTH_DATE.getMonth());
+    }
+
+    function getSelectedMonthStatusLabel() {
+      const offset = getSelectedMonthOffset();
+      if (offset === -1) return '先月';
+      if (offset === 0) return '当月';
+      if (offset === 1) return '翌月';
+      return '';
+    }
+
+    function formatYearMonth(date) {
+      return `${date.getFullYear()}年${String(date.getMonth() + 1).padStart(2, '0')}月`;
+    }
+
+    function renderMonthNavigation() {
+      const label = document.getElementById('attendanceMonthLabel');
+      const prevBtn = document.getElementById('prevMonthBtn');
+      const nextBtn = document.getElementById('nextMonthBtn');
+      const offset = getSelectedMonthOffset();
+      const statusLabel = getSelectedMonthStatusLabel();
+
+      if (label) {
+        label.textContent = `${formatYearMonth(selectedMonthDate)}${statusLabel ? `（${statusLabel}）` : ''}`;
+      }
+      if (prevBtn) prevBtn.disabled = offset <= MIN_MONTH_OFFSET;
+      if (nextBtn) nextBtn.disabled = offset >= MAX_MONTH_OFFSET;
+    }
+
+    function changeDisplayMonth(delta) {
+      const nextOffset = getSelectedMonthOffset() + delta;
+      if (nextOffset < MIN_MONTH_OFFSET || nextOffset > MAX_MONTH_OFFSET) return;
+
+      selectedMonthDate = new Date(
+        BASE_MONTH_DATE.getFullYear(),
+        BASE_MONTH_DATE.getMonth() + nextOffset,
+        1
+      );
+      fetchAttendance();
+    }
+
     function fetchAttendance() {
       showLoader();
-      fetch(`${API_URL}?userId=${encodeURIComponent(lineUserId)}`)
+      const year = selectedMonthDate.getFullYear();
+      const month = selectedMonthDate.getMonth() + 1;
+      const url = `${API_URL}?userId=${encodeURIComponent(lineUserId)}&year=${year}&month=${month}`;
+
+      fetch(url)
         .then(handleResponse)
         .then(res => {
           hideLoader();
@@ -206,6 +275,7 @@
           currentData = res.data || [];
           inTimeSettings = (res.settings && Array.isArray(res.settings.inTimes)) ? res.settings.inTimes : [];
           renderSettings();
+          renderMonthNavigation();
           renderMonthlySummary();
           renderList();
           updatePunchButtons();
@@ -306,14 +376,13 @@
       return `${h}時間${String(m).padStart(2, '0')}分`;
     }
 
-    function isCurrentMonthDate(dateStr) {
+    function isSelectedMonthDate(dateStr) {
       const m = normalizeDateString(dateStr).match(/^(\d{4})\/(\d{2})\/(\d{2})$/);
       if (!m) return false;
 
-      const now = new Date();
       const year = Number(m[1]);
       const month = Number(m[2]);
-      return year === now.getFullYear() && month === now.getMonth() + 1;
+      return year === selectedMonthDate.getFullYear() && month === selectedMonthDate.getMonth() + 1;
     }
 
     function getDailyWorkMinutes(row) {
@@ -340,7 +409,7 @@
       let incompleteDays = 0;
 
       currentData.forEach(row => {
-        if (!isCurrentMonthDate(row.date)) return;
+        if (!isSelectedMonthDate(row.date)) return;
         if (row.remark === '公休') return;
 
         const workMinutes = getDailyWorkMinutes(row);
@@ -358,11 +427,15 @@
     }
 
     function renderMonthlySummary() {
+      const titleEl = document.getElementById('monthlySummaryTitle');
       const summaryEl = document.getElementById('monthlySummary');
       const noteEl = document.getElementById('monthlySummaryNote');
       if (!summaryEl) return;
 
       const summary = calculateMonthlySummary();
+      const statusLabel = getSelectedMonthStatusLabel();
+      const ymLabel = `${formatYearMonth(selectedMonthDate)}${statusLabel ? `（${statusLabel}）` : ''}`;
+      if (titleEl) titleEl.textContent = `${formatYearMonth(selectedMonthDate)}集計`;
       summaryEl.innerHTML = `
         <div class="summary-box">
           <div class="summary-label">労働時間合計</div>
@@ -375,9 +448,7 @@
       `;
 
       if (noteEl) {
-        const d = new Date();
-        const ym = `${d.getFullYear()}年${String(d.getMonth() + 1).padStart(2, '0')}月`;
-        noteEl.innerHTML = `集計対象：${ym}の通常勤務 ${summary.countedDays}日分。前後1週間に表示されている当月以外の日付は除外しています。${summary.incompleteDays ? ` 出勤/退勤が未完成の行 ${summary.incompleteDays}件は除外。` : ''}`;
+        noteEl.innerHTML = `集計対象：${ymLabel}の通常勤務 ${summary.countedDays}日分。${summary.incompleteDays ? ` 出勤/退勤が未完成の行 ${summary.incompleteDays}件は除外。` : ''}`;
       }
     }
 
@@ -385,12 +456,17 @@
       let html = "";
       const today = new Date();
       today.setHours(0,0,0,0);
+      const rows = currentData.filter(row => isSelectedMonthDate(row.date));
+
+      if (!rows.length) {
+        document.getElementById('attendanceList').innerHTML = `<div class="hint">${formatYearMonth(selectedMonthDate)}の勤怠データがありません。</div>`;
+        return;
+      }
     
-      currentData.forEach(row => {
-        const rowDate = new Date(String(row.date).replace(/\//g, '-'));
-        rowDate.setHours(0,0,0,0);
-        const isFuture = rowDate > today;
-        const isToday = rowDate.getTime() === today.getTime();
+      rows.forEach(row => {
+        const rowDate = parseDateOnly(row.date);
+        const isFuture = rowDate ? rowDate > today : false;
+        const isToday = rowDate ? rowDate.getTime() === today.getTime() : false;
     
         let bgClass = "";
         if (isFuture) {
@@ -440,6 +516,8 @@
       btnIn.disabled = true;
       btnOut.disabled = true;
 
+      // 先月/翌月を表示している間は、本日の打刻ボタンは無効にする。
+      if (getSelectedMonthOffset() !== 0) return;
       if (!todayEntry) return;
       if (todayEntry.remark === '公休') return;
 
