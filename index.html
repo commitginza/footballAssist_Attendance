@@ -43,6 +43,12 @@
     .btn-out { background: #FF9800; color: white; }
     .btn-punch:disabled { background: #cccccc; cursor: not-allowed; color: #666; }
     .list-item.today {background: #fff8dc;border-left: 5px solid #00B900;padding-left: 10px;}
+
+    .monthly-summary { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .summary-box { background: #f8f9fa; border: 1px solid #e5e5e5; border-radius: 8px; padding: 12px; }
+    .summary-label { color: #666; font-size: 13px; margin-bottom: 6px; }
+    .summary-value { color: #333; font-size: 22px; font-weight: bold; }
+    .summary-note { color: #777; font-size: 12px; line-height: 1.5; margin-top: 10px; }
   </style>
 </head>
 <body>
@@ -59,6 +65,21 @@
     <div class="hint">
       出勤ボタンを押したとき、ここに登録した時刻から選択できます。例：09:00、09:30、10:00
     </div>
+  </div>
+
+  <div class="card">
+    <h2>当月集計</h2>
+    <div id="monthlySummary" class="monthly-summary">
+      <div class="summary-box">
+        <div class="summary-label">労働時間合計</div>
+        <div class="summary-value">0時間00分</div>
+      </div>
+      <div class="summary-box">
+        <div class="summary-label">残業時間合計</div>
+        <div class="summary-value">0時間00分</div>
+      </div>
+    </div>
+    <div id="monthlySummaryNote" class="summary-note"></div>
   </div>
 
   <div class="card">
@@ -185,6 +206,7 @@
           currentData = res.data || [];
           inTimeSettings = (res.settings && Array.isArray(res.settings.inTimes)) ? res.settings.inTimes : [];
           renderSettings();
+          renderMonthlySummary();
           renderList();
           updatePunchButtons();
         })
@@ -262,6 +284,101 @@
       if (!confirm(`${target} を削除しますか？`)) return;
       const next = inTimeSettings.filter((_, i) => i !== index);
       saveInTimeSettings(next);
+    }
+
+    // 残業の基準。8時間を超えた分を残業として集計する。
+    const STANDARD_WORK_MINUTES_PER_DAY = 8 * 60;
+
+    // 休憩時間が未入力の行は、現在の編集画面の初期値に合わせて1時間として計算する。
+    // 未入力を0分扱いにしたい場合は 0 に変更してください。
+    const DEFAULT_BREAK_MINUTES_FOR_SUMMARY = 60;
+
+    function timeToMinutes(value) {
+      const m = normalizeTime(value).match(/^(\d{2}):(\d{2})$/);
+      if (!m) return null;
+      return Number(m[1]) * 60 + Number(m[2]);
+    }
+
+    function formatMinutes(totalMinutes) {
+      const minutes = Math.max(0, Math.round(totalMinutes || 0));
+      const h = Math.floor(minutes / 60);
+      const m = minutes % 60;
+      return `${h}時間${String(m).padStart(2, '0')}分`;
+    }
+
+    function isCurrentMonthDate(dateStr) {
+      const m = normalizeDateString(dateStr).match(/^(\d{4})\/(\d{2})\/(\d{2})$/);
+      if (!m) return false;
+
+      const now = new Date();
+      const year = Number(m[1]);
+      const month = Number(m[2]);
+      return year === now.getFullYear() && month === now.getMonth() + 1;
+    }
+
+    function getDailyWorkMinutes(row) {
+      if (!row || row.remark === '公休') return null;
+      if (!row.inTime || !row.outTime) return null;
+
+      const inMin = timeToMinutes(row.inTime);
+      let outMin = timeToMinutes(row.outTime);
+      if (inMin === null || outMin === null) return null;
+
+      // 退勤が出勤より小さい場合は日跨ぎ勤務として扱う。
+      if (outMin < inMin) outMin += 24 * 60;
+
+      const breakMin = row.breakTime ? timeToMinutes(row.breakTime) : DEFAULT_BREAK_MINUTES_FOR_SUMMARY;
+      const safeBreakMin = breakMin === null ? 0 : breakMin;
+
+      return Math.max(0, outMin - inMin - safeBreakMin);
+    }
+
+    function calculateMonthlySummary() {
+      let totalWorkMinutes = 0;
+      let totalOvertimeMinutes = 0;
+      let countedDays = 0;
+      let incompleteDays = 0;
+
+      currentData.forEach(row => {
+        if (!isCurrentMonthDate(row.date)) return;
+        if (row.remark === '公休') return;
+
+        const workMinutes = getDailyWorkMinutes(row);
+        if (workMinutes === null) {
+          if (row.inTime || row.outTime) incompleteDays += 1;
+          return;
+        }
+
+        totalWorkMinutes += workMinutes;
+        totalOvertimeMinutes += Math.max(0, workMinutes - STANDARD_WORK_MINUTES_PER_DAY);
+        countedDays += 1;
+      });
+
+      return { totalWorkMinutes, totalOvertimeMinutes, countedDays, incompleteDays };
+    }
+
+    function renderMonthlySummary() {
+      const summaryEl = document.getElementById('monthlySummary');
+      const noteEl = document.getElementById('monthlySummaryNote');
+      if (!summaryEl) return;
+
+      const summary = calculateMonthlySummary();
+      summaryEl.innerHTML = `
+        <div class="summary-box">
+          <div class="summary-label">労働時間合計</div>
+          <div class="summary-value">${formatMinutes(summary.totalWorkMinutes)}</div>
+        </div>
+        <div class="summary-box">
+          <div class="summary-label">残業時間合計</div>
+          <div class="summary-value">${formatMinutes(summary.totalOvertimeMinutes)}</div>
+        </div>
+      `;
+
+      if (noteEl) {
+        const d = new Date();
+        const ym = `${d.getFullYear()}年${String(d.getMonth() + 1).padStart(2, '0')}月`;
+        noteEl.innerHTML = `集計対象：${ym}の通常勤務 ${summary.countedDays}日分。前後1週間に表示されている当月以外の日付は除外しています。${summary.incompleteDays ? ` 出勤/退勤が未完成の行 ${summary.incompleteDays}件は除外。` : ''}`;
+      }
     }
 
     function renderList() {
