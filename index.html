@@ -235,6 +235,18 @@
       return `${date.getFullYear()}年${String(date.getMonth() + 1).padStart(2, '0')}月`;
     }
 
+    function getWeekdayLabel(dateStr) {
+      const d = parseDateOnly(dateStr);
+      if (!d) return '';
+      return ['日', '月', '火', '水', '木', '金', '土'][d.getDay()];
+    }
+
+    function formatDateWithWeekday(dateStr) {
+      const normalized = normalizeDateString(dateStr);
+      const weekday = getWeekdayLabel(normalized);
+      return weekday ? `${normalized}（${weekday}）` : normalized;
+    }
+
     function renderMonthNavigation() {
       const label = document.getElementById('attendanceMonthLabel');
       const prevBtn = document.getElementById('prevMonthBtn');
@@ -465,6 +477,7 @@
     
       rows.forEach(row => {
         const rowDate = parseDateOnly(row.date);
+        const dateWithWeekday = formatDateWithWeekday(row.date);
         const isFuture = rowDate ? rowDate > today : false;
         const isToday = rowDate ? rowDate.getTime() === today.getTime() : false;
     
@@ -493,7 +506,7 @@
         html += `
           <div class="list-item ${bgClass}">
             <div>
-              <strong>${escapeHtml(row.date)}${isToday ? '<span style="color:#00B900;font-size:12px;margin-left:6px;">本日</span>' : ''}</strong><br>
+              <strong>${escapeHtml(dateWithWeekday)}${isToday ? '<span style="color:#00B900;font-size:12px;margin-left:6px;">本日</span>' : ''}</strong><br>
               <span style="font-size:14px; color:#666;">${displayMsg}</span>
               ${row.remark && row.remark !== '公休' ? `<br><small style="color:#999">備考: ${escapeHtml(row.remark)}</small>` : ''}
               ${row.breakTime ? `<br><small style="color:#999">休憩時間: ${escapeHtml(row.breakTime)}</small>` : ''}
@@ -640,7 +653,7 @@
         (rowNum === "Math" || rowNum === "" || rowNum === "null") ? "" : rowNum;
     
       document.getElementById('modalDate').value = dateStr;
-      document.getElementById('modalTitle').innerText = `${dateStr} の編集`;
+      document.getElementById('modalTitle').innerText = `${formatDateWithWeekday(dateStr)} の編集`;
       document.getElementById('modalRemark').value = remark === '公休' ? '' : remark;
       document.getElementById('modalTransport').value = transport || '';
       document.getElementById('modalInTime').value = inTime || '';
@@ -656,14 +669,22 @@
       const modalType = document.getElementById('modalType');
     
       if (isFuture) {
-        // 明日以降は公休登録のみ
-        modalType.value = 'holiday';
-        modalType.disabled = true;
-    
-        document.getElementById('modalInTime').value = '';
-        document.getElementById('modalOutTime').value = '';
-        document.getElementById('modalBreakTime').value = '';
-        document.getElementById('modalTransport').value = '';
+        // 明日以降はデフォルトを公休にするが、通常勤務も選択できるようにする
+        modalType.disabled = false;
+
+        const hasWorkData = Boolean(
+          inTime || outTime || breakTime || transport || (remark && remark !== '公休')
+        );
+
+        if (remark === '公休' || !hasWorkData) {
+          modalType.value = 'holiday';
+          document.getElementById('modalInTime').value = '';
+          document.getElementById('modalOutTime').value = '';
+          document.getElementById('modalBreakTime').value = '';
+          document.getElementById('modalTransport').value = '';
+        } else {
+          modalType.value = 'work';
+        }
       } else {
         // 今日以前は通常勤務/公休を選択可能
         modalType.disabled = false;
@@ -688,6 +709,11 @@
 
     function toggleFields() {
       const isHoliday = document.getElementById('modalType').value === 'holiday';
+      const breakTimeInput = document.getElementById('modalBreakTime');
+
+      if (!isHoliday && !breakTimeInput.value) {
+        breakTimeInput.value = '01:00';
+      }
     
       document.getElementById('timeFields').style.display = isHoliday ? 'none' : 'flex';
       document.getElementById('breakField').style.display = isHoliday ? 'none' : 'flex';
