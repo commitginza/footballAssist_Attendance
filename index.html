@@ -324,8 +324,8 @@
       <div class="form-row" id="breakField">
         <div class="form-group">
           <label>休憩時間</label>
-          <input type="time" id="modalBreakTime" value="01:00" step="60">
-          <div class="hint">初期値は1時間です。必要に応じて時分を変更してください。</div>
+          <input type="time" id="modalBreakTime" step="60">
+          <div class="hint">退勤ボタン押下時に、未入力なら1時間が自動設定されます。鉛筆編集では必要な場合だけ入力・修正してください。</div>
         </div>
       </div>
 
@@ -379,6 +379,9 @@
     const API_URL = 'https://cf9eor0n64.execute-api.ap-northeast-1.amazonaws.com/attendance';
     // ここに配備したMP4のURLを設定してください。例: https://example.com/manual/attendance-manual.mp4
     const MANUAL_VIDEO_URL = 'https://commitginza.github.io/footballAssist_Attendance/attendance_with_help_manual.mp4';
+    const DEFAULT_BREAK_TIME_ON_PUNCH_OUT = '01:00';
+    const WORK_TYPE_LABEL_WORK = '通常勤務';
+    const WORK_TYPE_LABEL_HOLIDAY = '公休';
     let lineUserId = "";
     let currentData = [];
     let inTimeSettings = [];
@@ -629,10 +632,6 @@
       return normalizeTime(value);
     }
     
-    function defaultBreakTime(value) {
-      return normalizeBreakTime(value) || '01:00';
-    }
-    
     function saveInTimeSettings(nextTimes) {
       showLoader();
       const normalized = [...new Set(nextTimes.map(normalizeTime).filter(Boolean))].sort();
@@ -676,7 +675,7 @@
     // 残業の基準。8時間を超えた分を残業として集計する。
     const STANDARD_WORK_MINUTES_PER_DAY = 8 * 60;
 
-    // 休憩時間が未入力の行は、現在の編集画面の初期値に合わせて1時間として計算する。
+    // 休憩時間が未入力の行は、退勤打刻時の自動設定値に合わせて1時間として計算する。
     // 未入力を0分扱いにしたい場合は 0 に変更してください。
     const DEFAULT_BREAK_MINUTES_FOR_SUMMARY = 60;
 
@@ -702,8 +701,43 @@
       return year === selectedMonthDate.getFullYear() && month === selectedMonthDate.getMonth() + 1;
     }
 
+    function normalizeAttendanceTypeValue(value) {
+      const raw = String(value || '').trim();
+      const lowered = raw.toLowerCase();
+      if (raw === WORK_TYPE_LABEL_HOLIDAY || lowered === 'holiday') return 'holiday';
+      if (raw === WORK_TYPE_LABEL_WORK || lowered === 'work') return 'work';
+      return '';
+    }
+
+    function getRowWorkTypeRaw(row) {
+      return row ? (row.workType || row.attendanceType || row.type || '') : '';
+    }
+
+    function getTypeCodeFromValues(workType, remark) {
+      const explicitType = normalizeAttendanceTypeValue(workType);
+      if (explicitType) return explicitType;
+
+      // M列の区分が空の旧データだけ、従来の「備考=公休」を互換的に公休扱いする。
+      if (String(remark || '').trim() === WORK_TYPE_LABEL_HOLIDAY) return 'holiday';
+      return 'work';
+    }
+
+    function isHolidayRow(row) {
+      return getTypeCodeFromValues(getRowWorkTypeRaw(row), row ? row.remark : '') === 'holiday';
+    }
+
+    function getRemarkForDisplay(row) {
+      if (!row) return '';
+      const hasExplicitType = Boolean(normalizeAttendanceTypeValue(getRowWorkTypeRaw(row)));
+      const remark = row.remark || '';
+
+      // 旧仕様でG列に入っていた公休マーカーは、備考としては表示しない。
+      if (!hasExplicitType && String(remark).trim() === WORK_TYPE_LABEL_HOLIDAY) return '';
+      return remark;
+    }
+
     function getDailyWorkMinutes(row) {
-      if (!row || row.remark === '公休') return null;
+      if (!row || isHolidayRow(row)) return null;
       if (!row.inTime || !row.outTime) return null;
 
       const inMin = timeToMinutes(row.inTime);
@@ -727,7 +761,7 @@
 
       currentData.forEach(row => {
         if (!isSelectedMonthDate(row.date)) return;
-        if (row.remark === '公休') return;
+        if (isHolidayRow(row)) return;
 
         const workMinutes = getDailyWorkMinutes(row);
         if (workMinutes === null) {
@@ -794,9 +828,11 @@
         }
     
         const breakDisplay = row.breakTime ? row.breakTime : '未入力';
+        const isHoliday = isHolidayRow(row);
+        const remarkDisplay = getRemarkForDisplay(row);
     
         let displayMsg = "--:-- / --:--";
-        if (row.remark === '公休') {
+        if (isHoliday) {
           displayMsg = "【公休】";
         } else if (row.inTime || row.outTime || row.breakTime) {
           displayMsg = `出勤: ${row.inTime || '--:--'} / 退勤: ${row.outTime || '--:--'} / 休憩: ${breakDisplay}`;
@@ -807,17 +843,18 @@
         const passRowNum = (row.rowNum === null || row.rowNum === undefined) ? "" : row.rowNum;
         const passTransport = row.transport ? row.transport : "";
         const passBreakTime = row.breakTime ? row.breakTime : "";
+        const passWorkType = getRowWorkTypeRaw(row);
     
         html += `
           <div class="list-item ${bgClass}">
             <div>
               <strong>${escapeHtml(dateWithWeekday)}${isToday ? '<span style="color:#00B900;font-size:12px;margin-left:6px;">本日</span>' : ''}</strong><br>
               <span style="font-size:14px; color:#666;">${displayMsg}</span>
-              ${row.remark && row.remark !== '公休' ? `<br><small style="color:#999">備考: ${escapeHtml(row.remark)}</small>` : ''}
+              ${remarkDisplay ? `<br><small style="color:#999">備考: ${escapeHtml(remarkDisplay)}</small>` : ''}
               ${row.breakTime ? `<br><small style="color:#999">休憩時間: ${escapeHtml(row.breakTime)}</small>` : ''}
               ${row.transport ? `<br><small style="color:#999">交通費: ${escapeHtml(row.transport)}円</small>` : ''}
             </div>
-            <div class="edit-icon" onclick="openModal('${escapeAttr(passRowNum)}', '${escapeAttr(row.date)}', '${escapeAttr(row.inTime)}', '${escapeAttr(row.outTime)}', '${escapeAttr(passBreakTime)}', '${escapeAttr(row.remark)}', '${escapeAttr(passTransport)}')">✏️</div>
+            <div class="edit-icon" onclick="openModal('${escapeAttr(passRowNum)}', '${escapeAttr(row.date)}', '${escapeAttr(row.inTime)}', '${escapeAttr(row.outTime)}', '${escapeAttr(passBreakTime)}', '${escapeAttr(remarkDisplay)}', '${escapeAttr(passTransport)}', '${escapeAttr(passWorkType)}')">✏️</div>
           </div>`;
       });
     
@@ -837,7 +874,7 @@
       // 先月/翌月を表示している間は、本日の打刻ボタンは無効にする。
       if (getSelectedMonthOffset() !== 0) return;
       if (!todayEntry) return;
-      if (todayEntry.remark === '公休') return;
+      if (isHolidayRow(todayEntry)) return;
 
       if (!todayEntry.inTime) btnIn.disabled = false;
       else if (todayEntry.inTime && !todayEntry.outTime) btnOut.disabled = false;
@@ -955,9 +992,12 @@
       let payload = {
         userId: lineUserId,
         date: todayStr,
+        punchType: type,
         rowNum: (todayEntry && todayEntry.rowNum) ? String(todayEntry.rowNum) : "",
         remark: (todayEntry && todayEntry.remark) ? todayEntry.remark : "",
-        transport: (todayEntry && todayEntry.transport) ? todayEntry.transport : ""
+        transport: (todayEntry && todayEntry.transport) ? todayEntry.transport : "",
+        workType: WORK_TYPE_LABEL_WORK,
+        attendanceType: 'work'
       };
 
       if (type === 'in') {
@@ -966,6 +1006,7 @@
       } else if (type === 'out') {
         payload.inTime = todayEntry ? todayEntry.inTime : "";
         payload.outTime = timeStr;
+        payload.autoBreakTimeIfEmpty = DEFAULT_BREAK_TIME_ON_PUNCH_OUT;
       }
 
       fetch(API_URL, {
@@ -1002,52 +1043,47 @@
       });
     }
 
-    function openModal(rowNum, dateStr, inTime, outTime, breakTime, remark, transport) {
+    function openModal(rowNum, dateStr, inTime, outTime, breakTime, remark, transport, workType) {
       document.getElementById('modalRowNum').value =
         (rowNum === "Math" || rowNum === "" || rowNum === "null") ? "" : rowNum;
+
+      const explicitType = normalizeAttendanceTypeValue(workType);
+      const typeCode = getTypeCodeFromValues(workType, remark);
+      const remarkForEdit = (!explicitType && String(remark || '').trim() === WORK_TYPE_LABEL_HOLIDAY) ? '' : remark;
     
       document.getElementById('modalDate').value = dateStr;
       document.getElementById('modalTitle').innerText = `${formatDateWithWeekday(dateStr)} の編集`;
-      document.getElementById('modalRemark').value = remark === '公休' ? '' : remark;
+      document.getElementById('modalRemark').value = remarkForEdit || '';
       document.getElementById('modalTransport').value = transport || '';
       document.getElementById('modalInTime').value = inTime || '';
       document.getElementById('modalOutTime').value = outTime || '';
     
-      // 休憩時間は、既存値がなければデフォルトで1時間
-      document.getElementById('modalBreakTime').value = defaultBreakTime(breakTime);
+      // 鉛筆編集では、休憩時間を自動入力しない。既存値がある場合だけ表示する。
+      document.getElementById('modalBreakTime').value = normalizeBreakTime(breakTime);
     
       const targetDate = parseDateOnly(dateStr);
       const today = parseDateOnly(getTodayStr());
       const isFuture = targetDate && today && targetDate > today;
     
       const modalType = document.getElementById('modalType');
-    
+      modalType.disabled = false;
+
       if (isFuture) {
-        // 明日以降はデフォルトを公休にするが、通常勤務も選択できるようにする
-        modalType.disabled = false;
+        // 明日以降で、M列の区分も勤務データもない行はデフォルトを公休にする。
+        const hasWorkData = Boolean(inTime || outTime || breakTime || transport || remarkForEdit || explicitType);
 
-        const hasWorkData = Boolean(
-          inTime || outTime || breakTime || transport || (remark && remark !== '公休')
-        );
-
-        if (remark === '公休' || !hasWorkData) {
+        if (!explicitType && !hasWorkData) {
           modalType.value = 'holiday';
           document.getElementById('modalInTime').value = '';
           document.getElementById('modalOutTime').value = '';
           document.getElementById('modalBreakTime').value = '';
           document.getElementById('modalTransport').value = '';
         } else {
-          modalType.value = 'work';
+          modalType.value = typeCode;
         }
       } else {
-        // 今日以前は通常勤務/公休を選択可能
-        modalType.disabled = false;
-    
-        if (remark === '公休') {
-          modalType.value = 'holiday';
-        } else {
-          modalType.value = 'work';
-        }
+        // 今日以前は、M列の区分を優先して通常勤務/公休を判定する。
+        modalType.value = typeCode;
       }
     
       toggleFields();
@@ -1065,11 +1101,6 @@
 
     function toggleFields() {
       const isHoliday = document.getElementById('modalType').value === 'holiday';
-      const breakTimeInput = document.getElementById('modalBreakTime');
-
-      if (!isHoliday && !breakTimeInput.value) {
-        breakTimeInput.value = '01:00';
-      }
     
       document.getElementById('timeFields').style.display = isHoliday ? 'none' : 'flex';
       document.getElementById('breakField').style.display = isHoliday ? 'none' : 'flex';
@@ -1077,11 +1108,17 @@
     }
 
     function saveChanges() {
+      const type = document.getElementById('modalType').value;
+      const breakTimeRaw = document.getElementById('modalBreakTime').value;
+      const breakTime = normalizeBreakTime(breakTimeRaw);
+
+      if (type !== 'holiday' && breakTimeRaw && !breakTime) {
+        showAppAlert('休憩時間は HH:mm 形式で入力してください。', '入力エラー');
+        return;
+      }
+
       showLoader();
       closeModal();
-    
-      const type = document.getElementById('modalType').value;
-      const breakTime = defaultBreakTime(document.getElementById('modalBreakTime').value);
     
       fetch(API_URL, {
         method: 'POST',
@@ -1094,7 +1131,9 @@
           outTime: type === 'holiday' ? '' : document.getElementById('modalOutTime').value,
           breakTime: type === 'holiday' ? '' : breakTime,
           transport: type === 'holiday' ? '' : document.getElementById('modalTransport').value,
-          remark: type === 'holiday' ? '公休' : document.getElementById('modalRemark').value
+          workType: type === 'holiday' ? WORK_TYPE_LABEL_HOLIDAY : WORK_TYPE_LABEL_WORK,
+          attendanceType: type,
+          remark: document.getElementById('modalRemark').value
         })
       })
       .then(handleResponse)
