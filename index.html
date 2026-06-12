@@ -142,6 +142,28 @@
     </div>
   </div>
 
+  <!-- 退勤時刻確認モーダル -->
+  <div id="punchOutModal" class="modal">
+    <div class="modal-content">
+      <h3>退勤時刻の確認</h3>
+      <input type="hidden" id="punchOutDate">
+      <input type="hidden" id="punchOutRowNum">
+
+      <div class="form-group">
+        <label>登録する退勤時刻</label>
+        <input type="time" id="punchOutTime" step="60">
+      </div>
+      <div class="hint">
+        現在時刻を初期表示しています。必要に応じて変更してから退勤を確定してください。
+      </div>
+
+      <div class="modal-actions">
+        <button class="btn-cancel" onclick="closePunchOutModal()">キャンセル</button>
+        <button class="btn-save" onclick="confirmPunchOut()">この時刻で退勤</button>
+      </div>
+    </div>
+  </div>
+
   <!-- 勤怠編集モーダル -->
   <div id="editModal" class="modal">
     <div class="modal-content">
@@ -610,7 +632,9 @@
         openPunchInModal();
         return;
       }
-      punchOut();
+      if (type === 'out') {
+        openPunchOutModal();
+      }
     }
 
     function openPunchInModal() {
@@ -642,7 +666,42 @@
     }
 
     function punchOut() {
-      sendPunch('out', getCurrentTimeStr());
+      openPunchOutModal();
+    }
+
+    function openPunchOutModal() {
+      const todayStr = getTodayStr();
+      const todayEntry = currentData.find(r => r.date === todayStr);
+      if (!todayEntry) { alert("本日の勤怠行が見つかりません"); return; }
+      if (!todayEntry.inTime) { alert("出勤時刻が未登録のため退勤できません"); updatePunchButtons(); return; }
+
+      const currentTime = getCurrentTimeStr();
+      document.getElementById('punchOutDate').value = todayStr;
+      document.getElementById('punchOutRowNum').value = todayEntry.rowNum ? String(todayEntry.rowNum) : "";
+      document.getElementById('punchOutTime').value = currentTime;
+      document.getElementById('punchOutModal').style.display = 'flex';
+    }
+
+    function closePunchOutModal() {
+      document.getElementById('punchOutModal').style.display = 'none';
+      updatePunchButtons();
+    }
+
+    function confirmPunchOut() {
+      const selectedTime = normalizeTime(document.getElementById('punchOutTime').value);
+      if (!selectedTime) { alert("退勤時刻を選択してください"); return; }
+
+      const todayEntry = currentData.find(r => r.date === getTodayStr());
+      const inMin = todayEntry ? timeToMinutes(todayEntry.inTime) : null;
+      const outMin = timeToMinutes(selectedTime);
+
+      if (inMin !== null && outMin !== null && outMin < inMin) {
+        const ok = confirm("退勤時刻が出勤時刻より前です。日跨ぎ勤務として登録しますか？");
+        if (!ok) return;
+      }
+
+      closePunchOutModal();
+      sendPunch('out', selectedTime);
     }
 
     function sendPunch(type, timeStr) {
@@ -758,6 +817,7 @@
     document.addEventListener('click', function(e) {
       if (e.target === document.getElementById('editModal')) closeModal();
       if (e.target === document.getElementById('punchInModal')) closePunchInModal();
+      if (e.target === document.getElementById('punchOutModal')) closePunchOutModal();
     });
 
     function closeModal() { document.getElementById('editModal').style.display = 'none'; }
