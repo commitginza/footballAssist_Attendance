@@ -56,6 +56,20 @@
     .month-label { color: #666; font-size: 13px; margin-top: 4px; }
     .month-nav-btn { width: 38px; height: 38px; border: none; border-radius: 50%; background: #00B900; color: #fff; font-size: 22px; font-weight: bold; line-height: 1; cursor: pointer; }
     .month-nav-btn:disabled { background: #e9ecef; color: #bbb; cursor: not-allowed; }
+    .app-alert-message {
+      font-size: 15px;
+      color: #555;
+      line-height: 1.6;
+      text-align: center;
+      white-space: pre-wrap;
+      margin: 15px 0;
+    }
+    
+    .app-alert-title {
+      text-align: center;
+      border-bottom: none !important;
+      padding-bottom: 0 !important;
+    }
   </style>
 </head>
 <body>
@@ -179,6 +193,17 @@
       </div>
     </div>
   </div>
+  <!-- 自作アラートモーダル -->
+  <div id="appAlertModal" class="modal">
+    <div class="modal-content">
+      <h3 id="appAlertTitle" class="app-alert-title">勤怠管理システム</h3>
+      <div id="appAlertMessage" class="app-alert-message"></div>
+  
+      <div class="modal-actions">
+        <button type="button" class="btn-save" onclick="closeAppAlert()">OK</button>
+      </div>
+    </div>
+  </div>
 
   <script>
     const LIFF_ID = '2009200776-63zMX8rf';
@@ -215,6 +240,24 @@
       }).catch(e => alert("LIFF初期化エラー: " + e.message));
     };
 
+    let appAlertCallback = null;
+
+    function showAppAlert(message, title = '勤怠管理システム', callback = null) {
+      appAlertCallback = typeof callback === 'function' ? callback : null;
+    
+      document.getElementById('appAlertTitle').textContent = title;
+      document.getElementById('appAlertMessage').textContent = message;
+      document.getElementById('appAlertModal').style.display = 'flex';
+    }
+    
+    function closeAppAlert() {
+      document.getElementById('appAlertModal').style.display = 'none';
+    
+      const callback = appAlertCallback;
+      appAlertCallback = null;
+    
+      if (callback) callback();
+    }
     function showLoader() { document.getElementById('loader').style.display = 'block'; }
     function hideLoader() { document.getElementById('loader').style.display = 'none'; }
 
@@ -633,18 +676,30 @@
       })
       .then(handleResponse)
       .then(res => {
-        if(res.success) {
-          alert(`${type === 'in' ? '出勤' : '退勤'}を打刻しました：${timeStr}`);
-          fetchAttendance();
+        hideLoader();
+      
+        if (res.success) {
+          showAppAlert(
+            `${type === 'in' ? '出勤' : '退勤'}を打刻しました：${timeStr}`,
+            '打刻完了',
+            fetchAttendance
+          );
         } else {
-          alert("エラー: " + res.error);
-          fetchAttendance();
+          showAppAlert(
+            "エラー: " + res.error,
+            'エラー',
+            fetchAttendance
+          );
         }
       })
       .catch(err => {
-         alert("打刻エラー詳細:\n" + err.message);
-         hideLoader();
-         updatePunchButtons();
+        hideLoader();
+      
+        showAppAlert(
+          "打刻エラー詳細:\n" + err.message,
+          'エラー',
+          updatePunchButtons
+        );
       });
     }
 
