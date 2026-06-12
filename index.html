@@ -10,7 +10,7 @@
     h2 { font-size: 18px; color: #333; border-bottom: 2px solid #00B900; padding-bottom: 5px; }
     .card { background: #fff; padding: 15px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); margin-bottom: 20px; }
     .help-card { padding: 0; overflow: hidden; border-left: 5px solid #00B900; }
-    .help-link { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 15px; text-decoration: none; color: #333; }
+    .help-link { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 15px; text-decoration: none; color: #333; width: 100%; background: #fff; border: none; text-align: left; cursor: pointer; font-family: inherit; box-sizing: border-box; }
     .help-link-main { font-size: 16px; font-weight: bold; margin-bottom: 4px; }
     .help-link-sub { color: #777; font-size: 13px; line-height: 1.5; }
     .help-link-arrow { color: #00B900; font-size: 20px; font-weight: bold; }
@@ -75,21 +75,131 @@
       border-bottom: none !important;
       padding-bottom: 0 !important;
     }
+
+
+    .manual-video-modal {
+      background: #111;
+      align-items: stretch;
+      justify-content: stretch;
+      z-index: 3000;
+    }
+
+    .manual-video-content {
+      width: 100%;
+      max-width: none;
+      height: 100%;
+      max-height: none;
+      background: #111;
+      color: #fff;
+      border-radius: 0;
+      padding: 0;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      box-sizing: border-box;
+    }
+
+    .manual-video-header {
+      flex: 0 0 auto;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 12px 14px;
+      background: #000;
+      border-bottom: 1px solid #333;
+    }
+
+    .manual-video-title {
+      font-size: 16px;
+      font-weight: bold;
+      line-height: 1.4;
+    }
+
+    .manual-video-close {
+      border: none;
+      background: #333;
+      color: #fff;
+      border-radius: 999px;
+      width: 38px;
+      height: 38px;
+      font-size: 22px;
+      line-height: 1;
+      cursor: pointer;
+    }
+
+    .manual-video-wrap {
+      flex: 1 1 auto;
+      min-height: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #000;
+    }
+
+    .manual-video-wrap video {
+      width: 100%;
+      height: 100%;
+      max-height: calc(100vh - 116px);
+      background: #000;
+      object-fit: contain;
+    }
+
+    .manual-video-actions {
+      flex: 0 0 auto;
+      display: flex;
+      gap: 10px;
+      padding: 12px;
+      background: #111;
+      box-sizing: border-box;
+    }
+
+    .manual-video-actions button,
+    .manual-video-actions a {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 44px;
+      padding: 10px;
+      border-radius: 8px;
+      font-weight: bold;
+      font-size: 14px;
+      text-decoration: none;
+      box-sizing: border-box;
+    }
+
+    .manual-video-actions button {
+      border: none;
+      background: #00B900;
+      color: #fff;
+      cursor: pointer;
+    }
+
+    .manual-video-actions a {
+      border: 1px solid #555;
+      background: #222;
+      color: #fff;
+    }
+
+    body.manual-open {
+      overflow: hidden;
+    }
   </style>
 </head>
 <body>
 
   <div id="loader">通信中...</div>
 
-  <!-- <div class="card help-card">
-    <a class="help-link" href="https://www.canva.com/design/DAHMVYinDto/PtYVh26kqKQr9gwto5kNfw/view" target="_blank" rel="noopener noreferrer" onclick="openManual(event)">
+  <div class="card help-card">
+    <button type="button" class="help-link" onclick="openManual(event)" aria-haspopup="dialog" aria-controls="manualVideoModal">
       <div>
         <div class="help-link-main">操作マニュアルを見る</div>
-        <div class="help-link-sub">出勤・退勤・勤怠修正の手順はこちら</div>
+        <div class="help-link-sub">動画で出勤・退勤・勤怠修正の手順を確認できます</div>
       </div>
       <div class="help-link-arrow" aria-hidden="true">＞</div>
-    </a>
-  </div> -->
+    </button>
+  </div>
 
   <div class="card">
     <h2>出勤時刻設定</h2>
@@ -230,6 +340,28 @@
       </div>
     </div>
   </div>
+  <!-- 操作マニュアル動画モーダル -->
+  <div id="manualVideoModal" class="modal manual-video-modal" role="dialog" aria-modal="true" aria-label="操作マニュアル動画">
+    <div class="manual-video-content">
+      <div class="manual-video-header">
+        <div class="manual-video-title">操作マニュアル動画</div>
+        <button type="button" class="manual-video-close" onclick="closeManual()" aria-label="閉じる">×</button>
+      </div>
+
+      <div class="manual-video-wrap">
+        <video id="manualVideo" controls playsinline preload="metadata">
+          <source id="manualVideoSource" src="" type="video/mp4">
+          お使いのブラウザでは動画を再生できません。
+        </video>
+      </div>
+
+      <div class="manual-video-actions">
+        <button type="button" onclick="playManualFullscreen()">全画面で見る</button>
+        <a id="manualVideoLink" href="#" target="_blank" rel="noopener noreferrer" onclick="openManualVideoExternal(event)">別画面で開く</a>
+      </div>
+    </div>
+  </div>
+
   <!-- 自作アラートモーダル -->
   <div id="appAlertModal" class="modal">
     <div class="modal-content">
@@ -245,7 +377,8 @@
   <script>
     const LIFF_ID = '2009200776-63zMX8rf';
     const API_URL = 'https://cf9eor0n64.execute-api.ap-northeast-1.amazonaws.com/attendance';
-    const MANUAL_URL = 'https://www.canva.com/design/DAHMVYinDto/PtYVh26kqKQr9gwto5kNfw/view';
+    // ここに配備したMP4のURLを設定してください。例: https://example.com/manual/attendance-manual.mp4
+    const MANUAL_VIDEO_URL = 'https://commitginza.github.io/footballAssist_Attendance/attendance_with_help_manual.mp4';
     let lineUserId = "";
     let currentData = [];
     let inTimeSettings = [];
@@ -259,22 +392,94 @@
     const MAX_MONTH_OFFSET = 1;
 
 
+    function isManualVideoUrlReady() {
+      return MANUAL_VIDEO_URL
+        && MANUAL_VIDEO_URL !== 'PASTE_MP4_URL_HERE'
+        && /^https?:\/\//.test(MANUAL_VIDEO_URL);
+    }
+
+    function prepareManualVideo() {
+      const video = document.getElementById('manualVideo');
+      const source = document.getElementById('manualVideoSource');
+      const link = document.getElementById('manualVideoLink');
+      if (!video || !source) return null;
+
+      if (source.getAttribute('src') !== MANUAL_VIDEO_URL) {
+        source.setAttribute('src', MANUAL_VIDEO_URL);
+        video.load();
+      }
+      if (link) link.href = MANUAL_VIDEO_URL;
+      return video;
+    }
+
     function openManual(event) {
+      if (event) event.preventDefault();
+
+      if (!isManualVideoUrlReady()) {
+        showAppAlert('操作マニュアル動画のURLが未設定です。MANUAL_VIDEO_URL にMP4のURLを設定してください。', '設定が必要です');
+        return;
+      }
+
+      prepareManualVideo();
+      document.getElementById('manualVideoModal').style.display = 'flex';
+      document.body.classList.add('manual-open');
+    }
+
+    function closeManual() {
+      const video = document.getElementById('manualVideo');
+      if (video) video.pause();
+      document.getElementById('manualVideoModal').style.display = 'none';
+      document.body.classList.remove('manual-open');
+    }
+
+    function playManualFullscreen() {
+      const video = prepareManualVideo();
+      if (!video) return;
+
+      const playResult = video.play();
+      if (playResult && typeof playResult.catch === 'function') {
+        playResult.catch(() => {});
+      }
+
+      // iPhone / iOS Safari系はvideo要素の専用全画面APIを優先する。
+      if (typeof video.webkitEnterFullscreen === 'function') {
+        video.webkitEnterFullscreen();
+        return;
+      }
+
+      const requestFullscreen = video.requestFullscreen
+        || video.webkitRequestFullscreen
+        || video.msRequestFullscreen;
+
+      if (requestFullscreen) {
+        requestFullscreen.call(video);
+      } else {
+        showAppAlert('この端末では全画面APIが利用できません。動画右下の全画面ボタン、または「別画面で開く」を使ってください。');
+      }
+    }
+
+    function openManualVideoExternal(event) {
+      if (event) event.preventDefault();
+
+      if (!isManualVideoUrlReady()) {
+        showAppAlert('操作マニュアル動画のURLが未設定です。MANUAL_VIDEO_URL にMP4のURLを設定してください。', '設定が必要です');
+        return;
+      }
+
       try {
         const canOpenFromLiff = typeof liff !== 'undefined'
           && typeof liff.isInClient === 'function'
           && liff.isInClient()
           && typeof liff.openWindow === 'function';
 
-        if (!canOpenFromLiff) return;
+        if (canOpenFromLiff) {
+          liff.openWindow({ url: MANUAL_VIDEO_URL, external: true });
+          return;
+        }
+      } catch (e) {}
 
-        event.preventDefault();
-        liff.openWindow({ url: MANUAL_URL, external: true });
-      } catch (e) {
-        event.preventDefault();
-        const opened = window.open(MANUAL_URL, '_blank', 'noopener,noreferrer');
-        if (!opened) window.location.href = MANUAL_URL;
-      }
+      const opened = window.open(MANUAL_VIDEO_URL, '_blank', 'noopener,noreferrer');
+      if (!opened) window.location.href = MANUAL_VIDEO_URL;
     }
 
     async function handleResponse(res) {
@@ -853,6 +1058,7 @@
       if (e.target === document.getElementById('editModal')) closeModal();
       if (e.target === document.getElementById('punchInModal')) closePunchInModal();
       if (e.target === document.getElementById('punchOutModal')) closePunchOutModal();
+      if (e.target === document.getElementById('manualVideoModal')) closeManual();
     });
 
     function closeModal() { document.getElementById('editModal').style.display = 'none'; }
